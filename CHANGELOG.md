@@ -1,5 +1,8 @@
 # 更新日志 (Changelog)
 
+## v0.3.19 (2026-01-24)
+*   **Release**: 版本号提升至 0.3.19 (Bump version).
+
 ## v0.3.18 (2026-01-24)
 *   **Style**: 调整 `plugin.json` 格式以匹配集市规范 (Formatting Fix)。
 *   **Config**: 设置 `disabledInPublish: true` (Archive function not needed for publish).
