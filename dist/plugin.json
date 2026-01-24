@@ -10,7 +10,7 @@
     "frontends": [
         "all"
     ],
-    "disabledInPublish": false,
+    "disabledInPublish": true,
     "displayName": {
         "default": "Kanban Archiver",
         "zh_CN": "看板自动归档"
