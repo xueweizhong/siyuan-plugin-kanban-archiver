@@ -2,8 +2,14 @@
     "name": "siyuan-plugin-kanban-archiver",
     "author": "xueweizhong",
     "url": "https://github.com/xueweizhong/siyuan-plugin-kanban-archiver",
-    "version": "0.3.16",
+    "version": "0.3.17",
     "minAppVersion": "3.5.3",
+    "backends": [
+        "all"
+    ],
+    "frontends": [
+        "all"
+    ],
     "disabledInPublish": false,
     "displayName": {
         "default": "Kanban Archiver",
@@ -17,21 +23,11 @@
         "default": "README.md",
         "en_US": "README_en_US.md"
     },
-    "funding": {
-        "openCollective": "",
-        "patreon": "",
-        "github": "",
-        "custom": []
-    },
     "keywords": [
         "kanban",
         "archive",
-        "automation"
-    ],
-    "backends": [
-        "all"
-    ],
-    "frontends": [
-        "all"
+        "看板",
+        "归档",
+        "自动"
     ]
 }

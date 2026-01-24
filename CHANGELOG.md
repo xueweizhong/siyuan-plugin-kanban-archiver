@@ -1,5 +1,8 @@
 # 更新日志 (Changelog)
 
+## v0.3.17 (2026-01-24)
+*   **Fix**: 移除 `plugin.json` 中冗余的 `funding` 字段。
+
 ## v0.3.16 (2026-01-24)
 *   **Fix**: 更新 `minAppVersion` 至 3.5.3 以符合市场要求。
 
