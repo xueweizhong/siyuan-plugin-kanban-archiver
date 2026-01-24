@@ -4,7 +4,7 @@
 
 [English README](README_en_US.md)
 
-![Banner](./banner.png)
+![Banner](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/banner.png)
 
 ## 功能特性
 
@@ -35,7 +35,7 @@
 
 ### 3. 手动执行
 
- ![操作](./操作.png)
+ ![操作](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/%E6%93%8D%E4%BD%9C.png)
 
 除了等待自动归档，您还可以手动触发：
 *   **顶栏菜单**：点击/悬停顶栏的插件图标：
@@ -67,7 +67,7 @@
 
 （请注意：赞赏完全自愿，不影响任何功能的使用）
 
-<img src="mumamuma.png" alt="Donate" width="300" />
+<img src="https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/mumamuma.png" alt="Donate" width="300" />
 
 ---
 *注：该插件通过 AI 制作*

@@ -4,7 +4,7 @@ This is a plugin designed for [SiYuan Note](https://b3log.org/siyuan/), **specif
 
 [简体中文 README](README.md)
 
-![Banner](./banner.png)
+![Banner](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/banner.png)
 
 ## Features
 
@@ -35,7 +35,7 @@ The plugin checks your boards automatically at the set time (e.g., `00:00`).
 
 ### 3. Manual Execution
 
-![Operation](./操作.png)
+![Operation](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/%E6%93%8D%E4%BD%9C.png)
 
 Besides waiting for auto-archiving, you can manually trigger it:
 *   **Top Bar Menu**: Click/Hover on the plugin icon in the top region:
@@ -67,7 +67,7 @@ This plugin is completely free and open source. If you find it helpful and want 
 
 (Please note: Donations are strictly voluntary and do not affect the use of any features.)
 
-<img src="mumamuma.png" alt="Donate" width="300" />
+<img src="https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/mumamuma.png" alt="Donate" width="300" />
 
 ---
 *Note: This plugin was created with AI assistance*

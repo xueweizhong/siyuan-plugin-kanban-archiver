@@ -175,6 +175,12 @@ export default class KanbanArchiverPlugin extends Plugin {
         }
     }
 
+    uninstall() {
+        console.log("Uninstalling Kanban Archiver Plugin");
+        this.removeData("config.json");
+        this.removeData("undo_history.json");
+    }
+
     openSetting() {
         const dialog = new Dialog({
             title: this.i18n.settingTitle || "看板自动归档设置",
