@@ -1,10 +1,12 @@
 # 更新日志 (Changelog)
 
+## v0.3.15 (2026-01-24)
+*   **Fix**: 严格遵循插件规范 (Strict Compliance)。
+    *   `plugin.json`: 移除 `icon`/`preview` 字段，补齐 `script`/`disabledInPublish`。
+    *   `README`: 修复残留的截图相对链接。
+    *   `Build`: 确保 zip 包纯净无冗余文件。
+
 ## v0.3.14 (2026-01-24)
-*   **Fix**: 进一步修复 Bazaar 审核反馈。
-    *   移除 zip 包中残留的 `README_zh_CN.md`。
-    *   补齐 `plugin.json` 缺失的 `frontends` / `backends` 字段。
-    *   将文档中的相对链接全部替换为绝对链接。
 
 ## v0.3.13 (2026-01-24)
 *   **Fix**: 修复了插件市场上架审核反馈的问题 (Bazaar Review Fixes)。
