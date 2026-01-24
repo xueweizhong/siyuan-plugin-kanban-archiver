@@ -1,0 +1,31 @@
+{
+    "name": "siyuan-plugin-kanban-archiver",
+    "author": "xueweizhong",
+    "url": "https://github.com/xueweizhong/siyuan-plugin-kanban-archiver-backup-v0_1_2?tab=readme-ov-file",
+    "version": "0.3.11",
+    "minAppVersion": "2.10.0",
+    "displayName": {
+        "default": "Kanban Archiver",
+        "zh_CN": "看板自动归档"
+    },
+    "description": {
+        "default": "Automatically archive completed tasks in Kanban boards",
+        "zh_CN": "自动将看板中已经完成的任务归档"
+    },
+    "readme": {
+        "default": "README.md",
+        "zh_CN": "README_zh_CN.md"
+    },
+    "funding": {
+        "openCollective": "",
+        "patreon": "",
+        "github": "",
+        "custom": []
+    },
+    "keywords": [
+        "kanban",
+        "archive",
+        "automation"
+    ],
+    "backends": []
+}
