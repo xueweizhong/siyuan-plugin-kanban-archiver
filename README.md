@@ -60,5 +60,14 @@ The plugin has a built-in safe "Regret Medicine" mechanism:
 
 [View Changelog (CHANGELOG.md)](CHANGELOG.md)
 
+
+## ☕️ Buy me a coffee
+
+This plugin is completely free and open source. If you find it helpful and want to support my development, feel free to buy me a milk tea! 🥤
+
+(Please note: Donations are strictly voluntary and do not affect the use of any features.)
+
+<img src="mumamuma.png" alt="Donate" width="300" />
+
 ---
 *Note: This plugin was created with AI assistance*
