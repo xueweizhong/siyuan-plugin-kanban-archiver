@@ -1,6 +1,6 @@
 {
     "name": "siyuan-plugin-kanban-archiver",
-    "version": "0.3.17",
+    "version": "0.3.18",
     "description": "Auto archive kanban tasks",
     "author": "xueweizhong",
     "repository": {

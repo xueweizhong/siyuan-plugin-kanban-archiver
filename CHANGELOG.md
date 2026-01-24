@@ -1,5 +1,8 @@
 # 更新日志 (Changelog)
 
+## v0.3.18 (2026-01-24)
+*   **Style**: 调整 `plugin.json` 格式以匹配集市规范 (Formatting Fix)。
+
 ## v0.3.17 (2026-01-24)
 *   **Fix**: 移除 `plugin.json` 中冗余的 `funding` 字段。
 
