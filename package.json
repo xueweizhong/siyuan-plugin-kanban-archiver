@@ -5,7 +5,7 @@
     "author": "xueweizhong",
     "repository": {
         "type": "git",
-        "url": "https://github.com/xueweizhong/siyuan-plugin-kanban-archiver-backup-v0_1_2?tab=readme-ov-file"
+        "url": "git+https://github.com/xueweizhong/siyuan-plugin-kanban-archiver.git"
     },
     "type": "module",
     "scripts": {

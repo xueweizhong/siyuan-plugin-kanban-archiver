@@ -1,7 +1,7 @@
 {
     "name": "siyuan-plugin-kanban-archiver",
     "author": "xueweizhong",
-    "url": "https://github.com/xueweizhong/siyuan-plugin-kanban-archiver-backup-v0_1_2?tab=readme-ov-file",
+    "url": "https://github.com/xueweizhong/siyuan-plugin-kanban-archiver",
     "version": "0.3.11",
     "minAppVersion": "2.10.0",
     "displayName": {
