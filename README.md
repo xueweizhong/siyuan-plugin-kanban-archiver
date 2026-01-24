@@ -2,7 +2,7 @@
 
 这是一个专为 [思源笔记 (SiYuan Note)](https://b3log.org/siyuan/) 设计的插件，**专用于配合思源原生的数据库 (Database / 属性视图) 功能使用**。它可以自动或手动扫描指定的看板 / 表格视图，将状态为“已完成”的任务移动到“归档”状态，保持数据整洁。
 
-[English README](README_en_US.md)
+[English README](https://github.com/xueweizhong/siyuan-plugin-kanban-archiver/blob/main/README_en_US.md)
 
 ![Banner](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/banner.png)
 
@@ -58,7 +58,7 @@
 
 ## 更新日志
 
-[查看版本更新记录 (CHANGELOG)](CHANGELOG.md)
+[查看版本更新记录 (CHANGELOG)](https://github.com/xueweizhong/siyuan-plugin-kanban-archiver/blob/main/CHANGELOG.md)
 
 
 ## ☕️ 请我喝奶茶
