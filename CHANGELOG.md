@@ -1,5 +1,8 @@
 # 更新日志 (Changelog)
 
+## v0.3.16 (2026-01-24)
+*   **Fix**: 更新 `minAppVersion` 至 3.5.3 以符合市场要求。
+
 ## v0.3.15 (2026-01-24)
 *   **Fix**: 严格遵循插件规范 (Strict Compliance)。
     *   `plugin.json`: 移除 `icon`/`preview` 字段，补齐 `script`/`disabledInPublish`。
