@@ -1,73 +1,73 @@
-### Kanban Archiver
+### 看板自动归档插件 (Kanban Archiver)
 
-This is a plugin designed for [SiYuan Note](https://b3log.org/siyuan/), **specifically for use with SiYuan's native Database (Attribute View)**. It can automatically or manually scan specified Kanban boards / Table views and move tasks with the "Completed" status to the "Archived" status, keeping your data clean.
+这是一个专为 [思源笔记 (SiYuan Note)](https://b3log.org/siyuan/) 设计的插件，**专用于配合思源原生的数据库 (Database / 属性视图) 功能使用**。它可以自动或手动扫描指定的看板 / 表格视图，将状态为“已完成”的任务移动到“归档”状态，保持数据整洁。
 
-[简体中文 README](README_zh_CN.md)
+[English README](README_en_US.md)
 
 ![Banner](./banner.png)
 
-## Features
+## 功能特性
 
-*   **Auto Archive**: Automatically performs archiving operations at your scheduled time (e.g., daily at 00:00).
-*   **Manual Archive**: One-click immediate archiving whenever needed.
-*   **Startup Catch-up**: If the scheduled time is missed (e.g., software was closed), it automatically catches up upon the next launch.
-*   **Safe Undo**: Supports undoing the last archive operation (Regret Medicine), with persistent history records.
-*   **Flexible Configuration**: Supports custom Kanban keywords, completed status names, and archive status names.
-*   **Smart Recognition**: Automatically identifies Document Attribute Views; supports multiple views.
+*   **自动归档**：根据您设定的时间（如每天 00:00）自动执行归档操作。
+*   **手动归档**：在不需要等待的时候，一键立即归档。
+*   **启动补漏**：如果错过预定时间（如软件未开），下次启动时自动补充执行。
+*   **安全撤销**：支持撤销最近一次归档操作（后悔药），并持久化历史记录。
+*   **配置灵活**：支持自定义看板关键词、完成状态名称、归档状态名称。
+*   **智能识别**：自动识别文档属性视图 (Attribute View)，支持多视图、分组视图。
 
-## Usage Guide
+## 使用指南
 
-### 1. Configure Plugin
-After installing the plugin, go to the settings interface. v0.2.0 introduced **Multi-Profile Configuration**, allowing you to create different archiving rules for various boards.
+### 1. 配置插件
+安装插件后，进入设置界面。v0.2.0 引入了**多规则配置**，您可以为不同的看板创建不同的归档规则。
 
-Click "New Rule" and fill in:
-*   **Rule Name**: A name for you to identify the rule (e.g., `Work Board Config`).
-*   **Kanban Keyword**: The keyword that must be contained in the document title (e.g., `My Work Board`).
-*   **Completed Status Name**: The source status (e.g., `Done`).
-*   **Archive Status Name**: The target status (e.g., `Archived`).
+点击“新建规则”，填写：
+*   **规则名称**：便于您识别的名字（例如 `工作看板配置`）。
+*   **看板关键词**：必须包含在文档标题中的关键词（例如 `我的工作看板`）。
+*   **完成状态名称**：源状态（例如 `已完成`）。
+*   **归档状态名称**：目标状态（例如 `归档`）。
 
-**Auto Archive Time**: Global setting, the specific time to check daily (e.g., `00:00`). All rules share this trigger time.
+**自动归档时间**：全局设置，每天执行检查的时间点（例如 `00:00`）。所有规则共享此触发时间。
 
-### 2. Auto Check
-The plugin checks your boards automatically at the set time (e.g., `00:00`).
-*   If the current time matches the scheduled time and it hasn't run today, it runs.
-*   If SiYuan Note is kept open, it checks every minute and triggers when the time is reached.
+### 2. 自动检查
+插件会在您设定的时间（例如 `00:00`）自动检查看板。
+*   如果当前时间已过设定时间且今日尚未运行过，插件会在启动时立即执行补漏检查。
+*   如果思源笔记一直运行，插件会每分钟检查一次，到达时间点时触发归档。
 
-### 3. Manual Execution
+### 3. 手动执行
 
-![Operation](./操作.png)
+ ![操作](./操作.png)
 
-Besides waiting for auto-archiving, you can manually trigger it:
-*   **Top Bar Menu**: Click/Hover on the plugin icon in the top region:
-    *   **Archive Now**: Immediately run an archive operation.
-    *   **Undo Archive**: Undo the last archive operation (supports multi-level undo).
-*   **Command Palette**: Open Command Palette (`⌥⇧P` / `Alt+Shift+P`), search and execute `Archive Kanban Tasks Now` or `Undo Archive`.
+除了等待自动归档，您还可以手动触发：
+*   **顶栏菜单**：点击/悬停顶栏的插件图标：
+    *   **立即归档**：立即手动运行一次归档。
+    *   **撤销归档**：撤销最近一次的归档操作（支持多级撤销）。
+*   **命令面板**：呼出命令面板（`⌥⇧P` / `Alt+Shift+P`），搜索并执行 `立即归档看板任务` 或 `撤销归档`。
 
-### 4. Undo Mechanism & History
+### 4. 撤销机制与历史记录
 
-The plugin has a built-in safe "Regret Medicine" mechanism:
-*   **Undo Scope**: Only undoes tasks involved in the **last** operation, restoring their status to "Completed".
-*   **Persistence**: Operation history is saved locally, so you can still undo after restarting the software.
-*   **Cleanup Policy**: To save space, the system automatically cleans up history records older than **30 entries** or **7 days**.
+插件内置了安全的“后悔药”机制：
+*   **撤销范围**：只会撤销**最近一次**操作所涉及的任务，将其状态恢复为“已完成”。
+*   **持久化**：操作历史记录保存在本地文件，重启软件后依然可以撤销。
+*   **清理策略**：为节省空间，系统会自动清理**30条**以前或**7天前**的历史记录。
 
-## Notes
+## 注意事项
 
-*   **Data Validity**: If you manually delete a task block after archiving, the undo operation may report failure (this is normal).
-*   Please ensure the configured status names match the option names in your document Attribute View exactly (case-sensitive).
-*   Auto archive requires SiYuan Note to be running. If the software is not running at the scheduled time, it will check at the next startup (current logic is primarily based on daily fixed-point triggering).
+*   **数据有效性**：如果在归档后您手动删除了任务块，撤销操作可能会报告失败（这是正常的）。
+*   请确保配置的状态名称与您文档属性视图中的选项名称完全一致（区分大小写）。
+*   自动归档需要思源笔记处于运行状态。如果设定的时间点软件未运行，将在下一次启动且时间匹配时检查（目前逻辑主要基于每日定点触发，建议设置为您常用的在线时间段或全天候运行的环境）。
 
-## Changelog
+## 更新日志
 
-[View Changelog (CHANGELOG.md)](CHANGELOG.md)
+[查看版本更新记录 (CHANGELOG)](CHANGELOG.md)
 
 
-## ☕️ Buy me a coffee
+## ☕️ 请我喝奶茶
 
-This plugin is completely free and open source. If you find it helpful and want to support my development, feel free to buy me a milk tea! 🥤
+本插件完全免费且开源。如果您觉得它对您有帮助，并且您想支持我的开发工作，欢迎请我喝一杯奶茶！🥤
 
-(Please note: Donations are strictly voluntary and do not affect the use of any features.)
+（请注意：赞赏完全自愿，不影响任何功能的使用）
 
 <img src="mumamuma.png" alt="Donate" width="300" />
 
 ---
-*Note: This plugin was created with AI assistance*
+*注：该插件通过 AI 制作*
