@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, tick } from "svelte";
+    import { t } from "./utils/i18n";
     export let plugin: any;
 
     let profiles = [];
@@ -33,10 +34,10 @@
         if (!plugin.config.profiles) plugin.config.profiles = [];
         const newProfile = {
             id: generateUUID(),
-            name: "新规则 " + (plugin.config.profiles.length + 1),
+            name: t("defaultNewRuleName") + " " + (plugin.config.profiles.length + 1),
             keyword: "",
-            completedStatus: "已完成",
-            archivedStatus: "归档",
+            completedStatus: t("defaultCompleted"),
+            archivedStatus: t("defaultArchived"),
             enabled: true
         };
         plugin.config.profiles = [...plugin.config.profiles, newProfile];
@@ -415,7 +416,7 @@
     <div class="section-header">
         <div class="section-title">
             <svg style="width:18px;height:18px"><use xlink:href="#iconCalendar"></use></svg>
-            全局定时归档
+            {t("globalArchiveTime")}
         </div>
         <div class="fn__flex-1"></div>
         
@@ -455,12 +456,12 @@
         <div class="section-header">
             <div class="section-title">
                 <svg style="width:18px;height:18px"><use xlink:href="#iconSettings"></use></svg>
-                归档规则列表
+                {t("archiveRuleList")}
             </div>
             <div class="fn__flex-1"></div>
             <button class="action-btn" on:click={addProfile}>
                 <svg style="width:14px;height:14px"><use xlink:href="#iconAdd"></use></svg>
-                新建规则
+                {t("addRule")}
             </button>
         </div>
 
@@ -474,14 +475,14 @@
                         </div>
                         
                         <div class="fn__flex-1" style="margin-left: 14px; display: flex; align-items: center;">
-                            <span style="font-weight: 600; font-size: 15px; color: var(--b3-theme-on-surface);">{profile.name || "未命名规则"}</span>
+                            <span style="font-weight: 600; font-size: 15px; color: var(--b3-theme-on-surface);">{profile.name || t("unnamedRule")}</span>
                             {#if profile.keyword}
                                 <span class="tag-preview">{profile.keyword}</span>
                             {/if}
                         </div>
                         
                          <div class="fn__flex-center" style="margin-right: 20px;" on:click|stopPropagation>
-                            <label class="switch-container" title={profile.enabled ? "已启用" : "已禁用"}>
+                            <label class="switch-container" title={profile.enabled ? t("enabled") : t("disabled")}>
                                 <input class="switch-input" type="checkbox" bind:checked={profile.enabled} on:change={save}>
                                 <span class="switch-track">
                                     <span class="switch-thumb"></span>
@@ -489,7 +490,7 @@
                             </label>
                         </div>
 
-                        <div class="icon-btn" on:click|stopPropagation={() => deleteProfile(profile.id)} title="删除规则">
+                        <div class="icon-btn" on:click|stopPropagation={() => deleteProfile(profile.id)} title={t("deleteRule")}>
                             <svg><use xlink:href="#iconTrashcan"></use></svg>
                         </div>
                     </div>
@@ -497,23 +498,23 @@
                     {#if expandedId === profile.id}
                         <div class="card-content">
                             <div class="input-group">
-                                <div class="input-label">规则显示名称</div>
-                                <input class="modern-input" type="text" bind:value={profile.name} placeholder="例如：主工作项目看板" on:change={save}/>
+                                <div class="input-label">{t("ruleNameLabel")}</div>
+                                <input class="modern-input" type="text" bind:value={profile.name} placeholder={t("ruleNamePlaceholder")} on:change={save}/>
                             </div>
 
                             <div class="input-group">
-                                <div class="input-label">文档标题关键词</div>
-                                <input class="modern-input" type="text" bind:value={profile.keyword} placeholder="输入包含在文档标题中的词，例如 '工作'" on:change={save}/>
+                                <div class="input-label">{t("keywordLabel")}</div>
+                                <input class="modern-input" type="text" bind:value={profile.keyword} placeholder={t("keywordPlaceholder")} on:change={save}/>
                             </div>
 
                             <div class="fn__flex" style="gap: 20px;">
                                 <div class="input-group fn__flex-1">
-                                    <div class="input-label">待归档状态 (源)</div>
-                                    <input class="modern-input" type="text" bind:value={profile.completedStatus} placeholder="已完成" on:change={save}/>
+                                    <div class="input-label">{t("completedStatusLabel")}</div>
+                                    <input class="modern-input" type="text" bind:value={profile.completedStatus} placeholder={t("completedStatusPlaceholder")} on:change={save}/>
                                 </div>
                                 <div class="input-group fn__flex-1">
-                                    <div class="input-label">目标归档状态</div>
-                                    <input class="modern-input" type="text" bind:value={profile.archivedStatus} placeholder="归档" on:change={save}/>
+                                    <div class="input-label">{t("archivedStatusLabel")}</div>
+                                    <input class="modern-input" type="text" bind:value={profile.archivedStatus} placeholder={t("archivedStatusPlaceholder")} on:change={save}/>
                                 </div>
                             </div>
                         </div>
@@ -523,7 +524,7 @@
 
             {#if profiles.length === 0}
                 <div style="text-align: center; padding: 48px; color: var(--b3-theme-on-surface-light); border: 2px dashed var(--b3-border-color); border-radius: 16px;">
-                    暂时没有规则，请点击右上方按钮新建。
+                    {t("noRulesTip")}
                 </div>
             {/if}
         </div>
@@ -532,12 +533,12 @@
     <div class="info-footer">
         <div style="font-weight: 700; color: var(--b3-theme-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px;">
             <svg style="width:16px;height:16px;"><use xlink:href="#iconInfo"></use></svg>
-            使用提示
+            {t("usageTipTitle")}
         </div>
         <ul>
-            <li><strong>全局定时</strong>：所有“已启用”的规则都会在上方设定的时间点自动执行。</li>
-            <li><strong>精准匹配</strong>：插件仅对标题包含“关键词”的文档生效。</li>
-            <li><strong>状态映射</strong>：请确保属性视图（AV）中存在对应的状态选项名称。</li>
+            <li><strong>{t("usageTipGlobal")}</strong>：{t("usageTipGlobalDesc")}</li>
+            <li><strong>{t("usageTipMatch")}</strong>：{t("usageTipMatchDesc")}</li>
+            <li><strong>{t("usageTipStatus")}</strong>：{t("usageTipStatusDesc")}</li>
         </ul>
     </div>
 </div>

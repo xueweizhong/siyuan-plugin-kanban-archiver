@@ -1,5 +1,6 @@
 import { Plugin, Protyle, Dialog, Menu } from "siyuan";
 import { archiveKanbanTasks, restoreKanbanTasks } from "./api/kanban";
+import { setPluginInstance } from "./utils/i18n";
 import Settings from "./Settings.svelte";
 
 export default class KanbanArchiverPlugin extends Plugin {
@@ -14,7 +15,8 @@ export default class KanbanArchiverPlugin extends Plugin {
     private readonly MAX_UNDO_DAYS = 7;
 
     async onload() {
-        console.log("Loading Kanban Archiver Plugin v0.3.0");
+        setPluginInstance(this);
+        console.log("Loading Kanban Archiver Plugin v0.3.11");
 
         // 1. Load config
         const loaded = await this.loadData("config.json");
@@ -34,10 +36,10 @@ export default class KanbanArchiverPlugin extends Plugin {
             console.log("Migrating legacy config to Profile 1...");
             this.config.profiles.push({
                 id: this.generateUUID(),
-                name: "默认规则",
-                keyword: loaded.kanbanKeyword || "我的工作看板",
-                completedStatus: loaded.completedStatus || "已完成",
-                archivedStatus: loaded.archivedStatus || "归档",
+                name: this.i18n.defaultRuleName || "默认规则",
+                keyword: loaded.kanbanKeyword || this.i18n.defaultKeyword || "我的工作看板",
+                completedStatus: loaded.completedStatus || this.i18n.defaultCompleted || "已完成",
+                archivedStatus: loaded.archivedStatus || this.i18n.defaultArchived || "归档",
                 enabled: true
             });
             // Cleanup legacy fields
@@ -49,10 +51,10 @@ export default class KanbanArchiverPlugin extends Plugin {
             // New install
             this.config.profiles.push({
                 id: this.generateUUID(),
-                name: "我的规则",
-                keyword: "我的工作看板",
-                completedStatus: "已完成",
-                archivedStatus: "归档",
+                name: this.i18n.defaultMyRule || "我的规则",
+                keyword: this.i18n.defaultKeyword || "我的工作看板",
+                completedStatus: this.i18n.defaultCompleted || "已完成",
+                archivedStatus: this.i18n.defaultArchived || "归档",
                 enabled: true
             });
         }
@@ -82,7 +84,7 @@ export default class KanbanArchiverPlugin extends Plugin {
         // Register top bar icon
         const topBarElement = this.addTopBar({
             icon: "iconFiles",
-            title: "看板自动归档",
+            title: this.i18n.pluginName || "看板自动归档",
             position: "right",
             callback: (event: any) => {
                 if (this.isMobile) {
@@ -100,14 +102,14 @@ export default class KanbanArchiverPlugin extends Plugin {
                 const menu = new Menu("kanban-archiver-menu");
                 menu.addItem({
                     icon: "iconFiles",
-                    label: "立即归档",
+                    label: this.i18n.archiveNow || "立即归档",
                     click: () => {
                         this.archiveNow();
                     }
                 });
                 menu.addItem({
                     icon: "iconUndo",
-                    label: `撤销归档 (${this.undoStack.length})`,
+                    label: `${this.i18n.undoArchive || "撤销归档"} (${this.undoStack.length})`,
                     disabled: this.undoStack.length === 0,
                     click: () => {
                         this.undoArchiveNow();
@@ -115,7 +117,7 @@ export default class KanbanArchiverPlugin extends Plugin {
                 });
                 menu.addItem({
                     icon: "iconSettings",
-                    label: "设置",
+                    label: this.i18n.settings || "设置",
                     click: () => {
                         this.openSetting();
                     }
@@ -132,7 +134,7 @@ export default class KanbanArchiverPlugin extends Plugin {
         // Register commands
         this.addCommand({
             langKey: "openSettings",
-            langText: "打开设置",
+            langText: this.i18n.cmdOpenSettings || "打开设置",
             hotkey: "",
             callback: () => {
                 this.openSetting();
@@ -141,7 +143,7 @@ export default class KanbanArchiverPlugin extends Plugin {
 
         this.addCommand({
             langKey: "archiveNow",
-            langText: "立即归档看板任务",
+            langText: this.i18n.cmdArchiveNow || "立即归档看板任务",
             hotkey: "",
             callback: () => {
                 this.archiveNow();
@@ -150,7 +152,7 @@ export default class KanbanArchiverPlugin extends Plugin {
 
         this.addCommand({
             langKey: "undoArchiveNow",
-            langText: "撤销归档（最近一次）",
+            langText: this.i18n.cmdUndoArchive || "撤销归档（最近一次）",
             hotkey: "",
             callback: () => {
                 this.undoArchiveNow();
@@ -175,7 +177,7 @@ export default class KanbanArchiverPlugin extends Plugin {
 
     openSetting() {
         const dialog = new Dialog({
-            title: "看板自动归档设置",
+            title: this.i18n.settingTitle || "看板自动归档设置",
             content: "<div id='kanban-archiver-settings' style='height: 100%;'></div>",
             width: "70vw",
             height: "80vh",
@@ -195,14 +197,14 @@ export default class KanbanArchiverPlugin extends Plugin {
         const menu = new Menu("kanban-archiver-menu");
         menu.addItem({
             icon: "iconFiles",
-            label: "立即归档",
+            label: this.i18n.archiveNow || "立即归档",
             click: () => {
                 this.archiveNow();
             }
         });
         menu.addItem({
             icon: "iconUndo",
-            label: `撤销归档 (${this.undoStack.length})`,
+            label: `${this.i18n.undoArchive || "撤销归档"} (${this.undoStack.length})`,
             disabled: this.undoStack.length === 0,
             click: () => {
                 this.undoArchiveNow();
@@ -210,7 +212,7 @@ export default class KanbanArchiverPlugin extends Plugin {
         });
         menu.addItem({
             icon: "iconSettings",
-            label: "设置",
+            label: this.i18n.settings || "设置",
             click: () => {
                 this.openSetting();
             }
