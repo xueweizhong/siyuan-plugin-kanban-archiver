@@ -435,8 +435,13 @@
             {t("globalArchiveTime")}
         </div>
         <div class="fn__flex-1"></div>
-        <button class="action-btn" on:click={refreshFromDisk}>
-            {t("refreshNow")}
+        <button class="action-btn" style="background-color: transparent; color: var(--b3-theme-on-surface); box-shadow: none; border: 1px solid var(--b3-theme-surface-lighter); margin-right: 12px;" on:click={() => plugin.undoArchiveNow()}>
+            <svg style="width:14px;height:14px"><use xlink:href="#iconUndo"></use></svg>
+            {t("undoArchive")}
+        </button>
+        <button class="action-btn" style="margin-right: 32px;" on:click={() => plugin.archiveNow()}>
+            <svg style="width:14px;height:14px"><use xlink:href="#iconFiles"></use></svg>
+            {t("archiveNow")}
         </button>
         
         <!-- Custom Time Trigger -->

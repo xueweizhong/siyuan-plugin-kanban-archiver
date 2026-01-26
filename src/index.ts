@@ -280,7 +280,7 @@ export default class KanbanArchiverPlugin extends Plugin {
         await this.saveData("undo_history.json", this.undoStack);
     }
 
-    private async archiveNow() {
+    public async archiveNow() {
         try {
             const ids = await archiveKanbanTasks(this, true);
             if (ids && ids.length > 0) {
@@ -295,7 +295,7 @@ export default class KanbanArchiverPlugin extends Plugin {
         }
     }
 
-    private async undoArchiveNow() {
+    public async undoArchiveNow() {
         if (this.undoStack.length === 0) {
             return;
         }
