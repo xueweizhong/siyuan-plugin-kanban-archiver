@@ -35,5 +35,6 @@
     "cmdOpenSettings": "打开设置",
     "cmdArchiveNow": "立即归档看板任务",
     "cmdUndoArchive": "撤销归档（最近一次）",
-    "settingTitle": "看板自动归档设置"
+    "settingTitle": "看板自动归档设置",
+    "refreshNow": "立即刷新"
 }

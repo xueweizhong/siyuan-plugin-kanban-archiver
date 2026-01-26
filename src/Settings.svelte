@@ -24,6 +24,22 @@
         archiveTime = plugin.config.archiveTime || "00:00";
     }
 
+    async function refreshFromDisk() {
+        showTimePicker = false;
+        if (plugin.reloadConfig) {
+            await plugin.reloadConfig();
+        } else {
+            const loaded = await plugin.loadData("config.json");
+            plugin.config = {
+                profiles: [],
+                archiveTime: "00:00",
+                lastRunDate: "",
+                ...loaded
+            };
+        }
+        refresh();
+    }
+
     async function save() {
         plugin.config.archiveTime = archiveTime;
         plugin.saveData("config.json", plugin.config);
@@ -419,6 +435,9 @@
             {t("globalArchiveTime")}
         </div>
         <div class="fn__flex-1"></div>
+        <button class="action-btn" on:click={refreshFromDisk}>
+            {t("refreshNow")}
+        </button>
         
         <!-- Custom Time Trigger -->
         <!-- svelte-ignore a11y-click-events-have-key-events -->

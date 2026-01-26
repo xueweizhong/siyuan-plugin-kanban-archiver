@@ -16,60 +16,9 @@ export default class KanbanArchiverPlugin extends Plugin {
 
     async onload() {
         setPluginInstance(this);
-        console.log("Loading Kanban Archiver Plugin v0.3.11");
+        console.log("Loading Kanban Archiver Plugin v0.3.20");
 
-        // 1. Load config
-        const loaded = await this.loadData("config.json");
-        this.config = {
-            profiles: [], // New structure: { id, name, keyword, completedStatus, archivedStatus, enabled }[]
-            archiveTime: "00:00",
-            lastRunDate: "",
-            ...loaded
-        };
-
-        // 2. Migration: Convert legacy config to first profile
-        if (!this.config.profiles || !Array.isArray(this.config.profiles)) {
-            this.config.profiles = [];
-        }
-
-        if (loaded && (loaded.kanbanKeyword || loaded.completedStatus) && this.config.profiles.length === 0) {
-            console.log("Migrating legacy config to Profile 1...");
-            this.config.profiles.push({
-                id: this.generateUUID(),
-                name: this.i18n.defaultRuleName || "默认规则",
-                keyword: loaded.kanbanKeyword || this.i18n.defaultKeyword || "我的工作看板",
-                completedStatus: loaded.completedStatus || this.i18n.defaultCompleted || "已完成",
-                archivedStatus: loaded.archivedStatus || this.i18n.defaultArchived || "归档",
-                enabled: true
-            });
-            // Cleanup legacy fields
-            delete this.config.kanbanKeyword;
-            delete this.config.completedStatus;
-            delete this.config.archivedStatus;
-            this.saveData("config.json", this.config);
-        } else if (this.config.profiles.length === 0) {
-            // New install
-            this.config.profiles.push({
-                id: this.generateUUID(),
-                name: this.i18n.defaultMyRule || "我的规则",
-                keyword: this.i18n.defaultKeyword || "我的工作看板",
-                completedStatus: this.i18n.defaultCompleted || "已完成",
-                archivedStatus: this.i18n.defaultArchived || "归档",
-                enabled: true
-            });
-        }
-
-        // 3. Ensure all profiles have 'enabled' property
-        let changed = false;
-        this.config.profiles.forEach((p: any) => {
-            if (p.enabled === undefined) {
-                p.enabled = true;
-                changed = true;
-            }
-        });
-        if (changed) {
-            this.saveData("config.json", this.config);
-        }
+        await this.loadAndNormalizeConfig();
 
         // Load Undo History
         try {
@@ -161,6 +110,60 @@ export default class KanbanArchiverPlugin extends Plugin {
 
         // Initialize scheduler
         this.initScheduler();
+    }
+
+    private async loadAndNormalizeConfig() {
+        const loaded = await this.loadData("config.json");
+        this.config = {
+            profiles: [],
+            archiveTime: "00:00",
+            lastRunDate: "",
+            ...loaded
+        };
+
+        if (!this.config.profiles || !Array.isArray(this.config.profiles)) {
+            this.config.profiles = [];
+        }
+
+        if (loaded && (loaded.kanbanKeyword || loaded.completedStatus) && this.config.profiles.length === 0) {
+            console.log("Migrating legacy config to Profile 1...");
+            this.config.profiles.push({
+                id: this.generateUUID(),
+                name: this.i18n.defaultRuleName || "默认规则",
+                keyword: loaded.kanbanKeyword || this.i18n.defaultKeyword || "我的工作看板",
+                completedStatus: loaded.completedStatus || this.i18n.defaultCompleted || "已完成",
+                archivedStatus: loaded.archivedStatus || this.i18n.defaultArchived || "归档",
+                enabled: true
+            });
+            delete this.config.kanbanKeyword;
+            delete this.config.completedStatus;
+            delete this.config.archivedStatus;
+            this.saveData("config.json", this.config);
+        } else if (this.config.profiles.length === 0) {
+            this.config.profiles.push({
+                id: this.generateUUID(),
+                name: this.i18n.defaultMyRule || "我的规则",
+                keyword: this.i18n.defaultKeyword || "我的工作看板",
+                completedStatus: this.i18n.defaultCompleted || "已完成",
+                archivedStatus: this.i18n.defaultArchived || "归档",
+                enabled: true
+            });
+        }
+
+        let changed = false;
+        this.config.profiles.forEach((p: any) => {
+            if (p.enabled === undefined) {
+                p.enabled = true;
+                changed = true;
+            }
+        });
+        if (changed) {
+            this.saveData("config.json", this.config);
+        }
+    }
+
+    async reloadConfig() {
+        await this.loadAndNormalizeConfig();
     }
 
     onLayoutReady() {

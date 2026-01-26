@@ -35,5 +35,6 @@
     "cmdOpenSettings": "Open Settings",
     "cmdArchiveNow": "Archive All Kanban Tasks",
     "cmdUndoArchive": "Undo Last Archive",
-    "settingTitle": "Kanban Archiver Settings"
+    "settingTitle": "Kanban Archiver Settings",
+    "refreshNow": "Refresh Now"
 }
