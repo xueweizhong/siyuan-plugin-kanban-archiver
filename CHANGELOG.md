@@ -1,4 +1,7 @@
-# 更新日志 (Changelog)
+## v0.3.21 (2026-01-26)
+*   **UI Update**: 移除了“立即刷新”按钮，替换为“立即归档”和“撤销归档”按钮 (Replace refresh button with archive/undo).
+*   **Style**: 优化按钮间距，防止误触 (Adjust button spacing).
+*   **Release**: 版本号提升至 0.3.21 (Bump version).
 
 ## v0.3.20 (2026-01-26)
 *   **Config**: 设置界面新增“立即刷新”按钮，支持配置从磁盘重新加载。
