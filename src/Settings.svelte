@@ -6,6 +6,10 @@
     let profiles = [];
     let archiveTime = "00:00";
     let expandedId = null;
+    let templates = [];
+    let expandedTemplateId = null;
+    let notebooks = [];
+    let statusOptions = {};
 
     // Time Picker State
     let showTimePicker = false;
@@ -17,11 +21,13 @@
         if (plugin.config.profiles && plugin.config.profiles.length === 1) {
             expandedId = plugin.config.profiles[0].id;
         }
+        loadNotebooks();
     });
 
     function refresh() {
         profiles = plugin.config.profiles || [];
         archiveTime = plugin.config.archiveTime || "00:00";
+        templates = plugin.config.templates || [];
     }
 
     async function refreshFromDisk() {
@@ -34,6 +40,7 @@
                 profiles: [],
                 archiveTime: "00:00",
                 lastRunDate: "",
+                templates: [],
                 ...loaded
             };
         }
@@ -42,6 +49,7 @@
 
     async function save() {
         plugin.config.archiveTime = archiveTime;
+        plugin.config.templates = templates;
         plugin.saveData("config.json", plugin.config);
         refresh();
     }
@@ -112,6 +120,80 @@
                 scrollToOption('m', m);
             }, 10);
         }
+    }
+
+    function generateTemplate(id: string) {
+        if (plugin.generateTemplate) plugin.generateTemplate(id);
+    }
+
+    async function loadNotebooks() {
+        if (!plugin.getNotebooks) return;
+        const res = await plugin.getNotebooks();
+        notebooks = res?.notebooks || [];
+    }
+
+    function addTemplate() {
+        const tmpl = {
+            id: generateUUID(),
+            name: t("templateNewName"),
+            period: "day",
+            ruleIds: [],
+            notebookId: "",
+            pathTemplate: "",
+            clipboardOnlySections: false,
+            titleTemplate: t("templateTitleDefault"),
+            sections: [
+                { id: generateUUID(), title: t("templateSectionTodo"), statuses: [] },
+                { id: generateUUID(), title: t("templateSectionDoing"), statuses: [] },
+                { id: generateUUID(), title: t("templateSectionDone"), statuses: [] }
+            ]
+        };
+        templates = [...templates, tmpl];
+        save();
+        expandedTemplateId = tmpl.id;
+    }
+
+    function deleteTemplate(id: string) {
+        templates = templates.filter(tpl => tpl.id !== id);
+        save();
+        if (expandedTemplateId === id) expandedTemplateId = null;
+    }
+
+    function toggleTemplateExpand(id: string) {
+        if (expandedTemplateId === id) expandedTemplateId = null;
+        else {
+            expandedTemplateId = id;
+            const tpl = templates.find(t => t.id === id);
+            if (tpl) refreshStatus(tpl);
+        }
+    }
+
+    function toggleTemplateRule(tpl, ruleId: string) {
+        const list = tpl.ruleIds || [];
+        tpl.ruleIds = list.includes(ruleId) ? list.filter(id => id !== ruleId) : [...list, ruleId];
+        save();
+        refreshStatus(tpl);
+    }
+
+    async function refreshStatus(tpl) {
+        if (!plugin.getStatusOptions) return;
+        statusOptions[tpl.id] = await plugin.getStatusOptions(tpl.ruleIds || []);
+    }
+
+    function addSection(tpl) {
+        tpl.sections = [...(tpl.sections || []), { id: generateUUID(), title: t("templateSectionNew"), statuses: [] }];
+        save();
+    }
+
+    function deleteSection(tpl, sid: string) {
+        tpl.sections = (tpl.sections || []).filter(s => s.id !== sid);
+        save();
+    }
+
+    function toggleSectionStatus(section, status: string) {
+        const list = section.statuses || [];
+        section.statuses = list.includes(status) ? list.filter(s => s !== status) : [...list, status];
+        save();
     }
 </script>
 
@@ -234,16 +316,16 @@
         align-items: center;
         justify-content: center;
         gap: 6px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        box-shadow: none;
     }
     .action-btn:hover {
         opacity: 0.9;
         transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        box-shadow: none;
     }
     .action-btn:active {
         transform: translateY(0);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        box-shadow: none;
     }
     .action-btn svg { fill: currentColor; }
 
@@ -268,7 +350,7 @@
     .card {
         border: 1px solid var(--b3-theme-surface-lighter);
         border-radius: 16px; 
-        background: var(--b3-theme-surface);
+        background: transparent;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         margin-bottom: 12px;
         overflow: hidden;
@@ -290,7 +372,7 @@
         align-items: center;
         cursor: pointer;
         user-select: none;
-        background: var(--b3-theme-surface);
+        background: transparent;
     }
     
     .card-content {
@@ -299,7 +381,7 @@
         flex-direction: column;
         gap: 16px;
         border-top: 1px solid var(--b3-border-color);
-        background: var(--b3-theme-surface-light);
+        background: transparent;
     }
 
     .input-group {
@@ -418,6 +500,26 @@
 
     .fn__flex-1 { flex: 1; }
     .fn__flex { display: flex; }
+
+    .dot-check {
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 1.5px solid var(--b3-border-color);
+        background: transparent;
+        display: inline-block;
+        position: relative;
+        cursor: pointer;
+    }
+    .dot-check:checked {
+        border-color: var(--b3-theme-primary);
+        background: var(--b3-theme-primary);
+        box-shadow: inset 0 0 0 2px var(--b3-theme-background);
+    }
+    .status-dot:hover .dot-check {
+        border-color: var(--b3-theme-primary-light);
+    }
 </style>
 
 <!-- Backdrop -->
@@ -554,6 +656,147 @@
         </div>
     </div>
 
+    <!-- Templates -->
+    <div style="margin-top: 24px; display: flex; flex-direction: column;">
+        <div class="section-header">
+            <div class="section-title">
+                <svg style="width:18px;height:18px"><use xlink:href="#iconCalendar"></use></svg>
+                {t("templateListTitle")}
+            </div>
+            <div class="fn__flex-1"></div>
+            <button class="action-btn" style="width: 132px; justify-content: center;" on:click={addTemplate}>
+                <svg style="width:14px;height:14px"><use xlink:href="#iconAdd"></use></svg>
+                {t("templateAdd")}
+            </button>
+        </div>
+
+        <div class="profile-container">
+            {#each templates as tpl (tpl.id)}
+                <div class="card" class:expanded={expandedTemplateId === tpl.id}>
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                    <div class="card-header" on:click={() => toggleTemplateExpand(tpl.id)}>
+                        <div class="chevron">
+                            <svg style="width:12px;height:12px"><use xlink:href="#iconRight"></use></svg>
+                        </div>
+                        <div class="fn__flex-1" style="margin-left: 14px; display: flex; align-items: center;">
+                            <span style="font-weight: 600; font-size: 15px; color: var(--b3-theme-on-surface);">{tpl.name}</span>
+                            <span class="tag-preview">{t(`templatePeriod_${tpl.period || 'none'}`)}</span>
+                        </div>
+                        <button class="action-btn" style="height: 28px; padding: 0 12px; margin-right: 8px;" on:click|stopPropagation={() => generateTemplate(tpl.id)}>
+                            {t("templateGenerate")}
+                        </button>
+                        <div class="icon-btn" on:click|stopPropagation={() => deleteTemplate(tpl.id)} title={t("deleteRule")}>
+                            <svg><use xlink:href="#iconTrashcan"></use></svg>
+                        </div>
+                    </div>
+
+                    {#if expandedTemplateId === tpl.id}
+                        <div class="card-content">
+                            <div class="input-group">
+                                <div class="input-label">{t("templateNameLabel")}</div>
+                                <input class="modern-input" type="text" bind:value={tpl.name} on:change={save}/>
+                            </div>
+                            <div class="input-group">
+                                <div class="input-label">{t("templatePeriodLabel")}</div>
+                                <select class="modern-input" bind:value={tpl.period} on:change={save}>
+                                    <option value="none">{t("templatePeriod_none")}</option>
+                                    <option value="day">{t("templatePeriod_day")}</option>
+                                    <option value="week">{t("templatePeriod_week")}</option>
+                                    <option value="month">{t("templatePeriod_month")}</option>
+                                    <option value="year">{t("templatePeriod_year")}</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <div class="input-label">{t("templateRuleLabel")}</div>
+                                <div class="fn__flex" style="flex-wrap: wrap; gap: 12px;">
+                                    {#each profiles as p}
+                                        <label class="fn__flex" style="align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--b3-border-color); border-radius: 999px; background: var(--b3-theme-background);">
+                                            <input type="checkbox" checked={tpl.ruleIds?.includes(p.id)} on:change={() => toggleTemplateRule(tpl, p.id)} />
+                                            <span style="font-size: 13px;">{p.name || p.keyword || p.id}</span>
+                                        </label>
+                                    {/each}
+                                    {#if profiles.length === 0}
+                                        <div style="font-size: 13px; color: var(--b3-theme-on-surface-light);">{t("reportNoProfileTip")}</div>
+                                    {/if}
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <div class="input-label">{t("templateNotebookLabel")}</div>
+                                <select class="modern-input" bind:value={tpl.notebookId} on:change={save}>
+                                    <option value="">{t("templateNotebookAuto")}</option>
+                                    {#each notebooks as nb}
+                                        <option value={nb.id}>{nb.name}</option>
+                                    {/each}
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <div class="input-label">{t("templatePathLabel")}</div>
+                                <input class="modern-input" type="text" bind:value={tpl.pathTemplate} placeholder={t("templatePathPlaceholder")} on:change={save}/>
+                            </div>
+                            <div class="input-group">
+                                <div class="input-label">{t("reportClipboardOnlySections")}</div>
+                                <label class="switch-container" title={tpl.clipboardOnlySections ? t("enabled") : t("disabled")}>
+                                    <input class="switch-input" type="checkbox" bind:checked={tpl.clipboardOnlySections} on:change={save}>
+                                    <span class="switch-track">
+                                        <span class="switch-thumb"></span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div class="input-group">
+                                <div class="input-label">{t("templateTitleLabel")}</div>
+                                <input class="modern-input" type="text" bind:value={tpl.titleTemplate} placeholder={t("templateTitlePlaceholder")} on:change={save}/>
+                            </div>
+
+                            <div class="input-group">
+                                <div class="input-label">{t("templateSectionList")}</div>
+                                <div class="fn__flex" style="flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                                    {#if (statusOptions[tpl.id] || []).length === 0}
+                                        <div style="font-size: 13px; color: var(--b3-theme-on-surface-light);">{t("templateStatusEmpty")}</div>
+                                    {:else}
+                                        {#each statusOptions[tpl.id] as st}
+                                            <span class="tag-preview">{st}</span>
+                                        {/each}
+                                    {/if}
+                                </div>
+                                {#each tpl.sections as sec (sec.id)}
+                                    <div class="card" style="margin-bottom: 12px;">
+                                        <div class="card-content">
+                                            <div class="input-group">
+                                                <div class="input-label">{t("templateSectionTitleLabel")}</div>
+                                                <input class="modern-input" type="text" bind:value={sec.title} on:change={save}/>
+                                            </div>
+                                            <div class="input-group">
+                                                <div class="input-label">{t("templateSectionStatusLabel")}</div>
+                                                <div class="fn__flex" style="flex-wrap: wrap; gap: 10px;">
+                                                    {#each (statusOptions[tpl.id] || []) as st}
+                                                        <label class="fn__flex status-dot" style="align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--b3-border-color); border-radius: 999px; background: var(--b3-theme-background);">
+                                                            <input class="dot-check" type="checkbox" checked={(sec.statuses || []).includes(st)} on:change={() => toggleSectionStatus(sec, st)} />
+                                                            <span style="font-size: 12px;">{st}</span>
+                                                        </label>
+                                                    {/each}
+                                                </div>
+                                            </div>
+                                            <div class="fn__flex" style="justify-content: flex-end;">
+                                                <div class="icon-btn" on:click={() => deleteSection(tpl, sec.id)} title={t("templateSectionDelete")}>
+                                                    <svg><use xlink:href="#iconTrashcan"></use></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/each}
+                                <div class="fn__flex" style="justify-content: flex-start;">
+                                    <button class="action-btn" style="width: 132px; justify-content: center;" on:click={() => addSection(tpl)}>
+                                        {t("templateSectionAdd")}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            {/each}
+        </div>
+    </div>
+
     <div class="info-footer">
         <div style="font-weight: 700; color: var(--b3-theme-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px;">
             <svg style="width:16px;height:16px;"><use xlink:href="#iconInfo"></use></svg>
@@ -563,6 +806,7 @@
             <li><strong>{t("usageTipGlobal")}</strong>：{t("usageTipGlobalDesc")}</li>
             <li><strong>{t("usageTipMatch")}</strong>：{t("usageTipMatchDesc")}</li>
             <li><strong>{t("usageTipStatus")}</strong>：{t("usageTipStatusDesc")}</li>
+            <li><strong>{t("usageTipReport")}</strong>：{t("usageTipReportDesc")}</li>
         </ul>
     </div>
 </div>

@@ -1,73 +1,93 @@
-### Kanban Archiver
+# Kanban Workflow
 
-This is a plugin designed for [SiYuan Note](https://b3log.org/siyuan/), **specifically for use with SiYuan's native Database (Attribute View)**. It can automatically or manually scan specified Kanban boards / Table views and move tasks with the "Completed" status to the "Archived" status, keeping your data clean.
-
-[简体中文 README](https://github.com/xueweizhong/siyuan-plugin-kanban-archiver/blob/main/README.md)
-
-![Banner](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/banner.png)
+Kanban Workflow is a unified plugin for SiYuan Attribute View / Database, combining **auto-archiving** and **report templates** into one reliable workflow.
 
 ## Features
 
-*   **Auto Archive**: Automatically performs archiving operations at your scheduled time (e.g., daily at 00:00).
-*   **Manual Archive**: One-click immediate archiving whenever needed.
-*   **Startup Catch-up**: If the scheduled time is missed (e.g., software was closed), it automatically catches up upon the next launch.
-*   **Safe Undo**: Supports undoing the last archive operation (Regret Medicine), with persistent history records.
-*   **Flexible Configuration**: Supports custom Kanban keywords, completed status names, and archive status names.
-*   **Smart Recognition**: Automatically identifies Document Attribute Views; supports multiple views.
+- Auto archive by schedule
+- One-click archive + undo last archive
+- Multiple rules for different Kanban documents
+- Report templates with custom titles, sections, and paths
+- Multi-board summary grouped by board
+- Status mapping by reading AV status options
 
-## Usage Guide
+## Usage (Detailed)
 
-### 1. Configure Plugin
-After installing the plugin, go to the settings interface. v0.2.0 introduced **Multi-Profile Configuration**, allowing you to create different archiving rules for various boards.
+### 1. Archive Rules
+Add rules in Settings:
+- **Rule name** (for identification)
+- **Document keyword** (to locate the Kanban doc)
+- **Source status** (e.g. Done)
+- **Target status** (e.g. Archived)
 
-Click "New Rule" and fill in:
-*   **Rule Name**: A name for you to identify the rule (e.g., `Work Board Config`).
-*   **Kanban Keyword**: The keyword that must be contained in the document title (e.g., `My Work Board`).
-*   **Completed Status Name**: The source status (e.g., `Done`).
-*   **Archive Status Name**: The target status (e.g., `Archived`).
+Set a global schedule to auto-run archiving.
 
-**Auto Archive Time**: Global setting, the specific time to check daily (e.g., `00:00`). All rules share this trigger time.
+### 2. Report Templates
+In “Report Templates”:
+- Add a template
+- Choose **Filter Period** (none/day/week/month/year)
+- Select **Source Rules (multi-select)**
+- Choose **Target Notebook** (by name)
+- Set **Output Path Template** (optional, supports `{YYYY}/{MM}/{WW}/{date}`)
+- Set **Title Template** (supports `{date}`)
+- Map statuses to sections
 
-### 2. Auto Check
-The plugin checks your boards automatically at the set time (e.g., `00:00`).
-*   If the current time matches the scheduled time and it hasn't run today, it runs.
-*   If SiYuan Note is kept open, it checks every minute and triggers when the time is reached.
+### 3. Generate Reports
+Entries:
+- Topbar menu → `Generate: Template Name`
+- Template card → “Generate”
+- Command palette → `Generate: Template Name`
 
-### 3. Manual Execution
+Results:
+- Writes to target path
+- Repeated generation replaces previous section
+- Copies to clipboard (rich text + plain text)
 
-![Operation](https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/%E6%93%8D%E4%BD%9C.png)
+## Example Scenario
 
-Besides waiting for auto-archiving, you can manually trigger it:
-*   **Top Bar Menu**: Click/Hover on the plugin icon in the top region:
-    *   **Archive Now**: Immediately run an archive operation.
-    *   **Undo Archive**: Undo the last archive operation (supports multi-level undo).
-*   **Command Palette**: Open Command Palette (`⌥⇧P` / `Alt+Shift+P`), search and execute `Archive Kanban Tasks Now` or `Undo Archive`.
+Assume you have a Kanban document named “My Work Board” with statuses: Todo, Doing, Done, Archived.
 
-### 4. Undo Mechanism & History
+**Goal**: Every Friday, generate a weekly report of “Done/Archived”, and auto-archive all “Done”.
 
-The plugin has a built-in safe "Regret Medicine" mechanism:
-*   **Undo Scope**: Only undoes tasks involved in the **last** operation, restoring their status to "Completed".
-*   **Persistence**: Operation history is saved locally, so you can still undo after restarting the software.
-*   **Cleanup Policy**: To save space, the system automatically cleans up history records older than **30 entries** or **7 days**.
+**Steps**:
+1. Create an archive rule  
+   - Rule name: My Work Board  
+   - Document keyword: My Work Board  
+   - Source status: Done  
+   - Target status: Archived  
+2. Create a report template  
+   - Template name: Weekly Report  
+   - Filter period: Weekly  
+   - Source rules: select “My Work Board”  
+   - Target notebook: “Work Logs”  
+   - Output path: `Weekly/{YYYY}/{WW}`  
+   - Title template: `Weekly Report ({date})`  
+   - Sections mapping:  
+     - “Todo” → Todo  
+     - “Doing” → Doing  
+     - “Done” → Done, Archived  
+3. On Friday, click “Generate: Weekly Report”. It will:
+   - Create the report and group items by section  
+   - Copy it to clipboard  
+   - Auto-archive Done items on schedule
 
 ## Notes
 
-*   **Data Validity**: If you manually delete a task block after archiving, the undo operation may report failure (this is normal).
-*   Please ensure the configured status names match the option names in your document Attribute View exactly (case-sensitive).
-*   Auto archive requires SiYuan Note to be running. If the software is not running at the scheduled time, it will check at the next startup (current logic is primarily based on daily fixed-point triggering).
+- Rule keyword should uniquely match the Kanban document title
+- Status names must match AV options exactly
+- When using week/month/year filters, only “done/archived” statuses are filtered by time
 
 ## Changelog
 
-[View Changelog (CHANGELOG.md)](https://github.com/xueweizhong/siyuan-plugin-kanban-archiver/blob/main/CHANGELOG.md)
+See: CHANGELOG.md
 
+## ☕️ Buy Me Milk Tea
 
-## ☕️ Buy me a coffee
+This plugin is free and open source. If it helps you, consider buying me a milk tea! 🥤
 
-This plugin is completely free and open source. If you find it helpful and want to support my development, feel free to buy me a milk tea! 🥤
-
-(Please note: Donations are strictly voluntary and do not affect the use of any features.)
+(Voluntary, does not affect any features.)
 
 <img src="https://raw.githubusercontent.com/xueweizhong/siyuan-plugin-kanban-archiver/main/mumamuma.png" alt="Donate" width="300" />
 
 ---
-*Note: This plugin was created with AI assistance*
+*Note: Built with AI assistance.*

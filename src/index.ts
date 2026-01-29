@@ -1,9 +1,11 @@
 import { Plugin, Protyle, Dialog, Menu } from "siyuan";
 import { archiveKanbanTasks, restoreKanbanTasks } from "./api/kanban";
+import { getAttributeViewKeysByAvID, lsNotebooks, sql } from "./api";
 import { setPluginInstance } from "./utils/i18n";
 import Settings from "./Settings.svelte";
+import { generateTemplateReport } from "./report";
 
-export default class KanbanArchiverPlugin extends Plugin {
+export default class KanbanWorkflowPlugin extends Plugin {
 
     private timer: any;
     private isMobile: boolean;
@@ -16,7 +18,7 @@ export default class KanbanArchiverPlugin extends Plugin {
 
     async onload() {
         setPluginInstance(this);
-        console.log("Loading Kanban Archiver Plugin v0.3.20");
+        console.log("Loading Kanban Workflow Plugin v0.1.0");
 
         await this.loadAndNormalizeConfig();
 
@@ -33,7 +35,7 @@ export default class KanbanArchiverPlugin extends Plugin {
         // Register top bar icon
         const topBarElement = this.addTopBar({
             icon: "iconFiles",
-            title: this.i18n.pluginName || "看板自动归档",
+            title: this.i18n.pluginName || "看板工作流",
             position: "right",
             callback: (event: any) => {
                 if (this.isMobile) {
@@ -55,6 +57,16 @@ export default class KanbanArchiverPlugin extends Plugin {
                     click: () => {
                         this.archiveNow();
                     }
+                });
+                const templates = this.config.templates || [];
+                templates.forEach((tpl: any) => {
+                    menu.addItem({
+                        icon: "iconCalendar",
+                        label: `${this.i18n.generateTemplatePrefix || "生成"}：${tpl.name}`,
+                        click: () => {
+                            this.generateTemplate(tpl.id);
+                        }
+                    });
                 });
                 menu.addItem({
                     icon: "iconUndo",
@@ -108,6 +120,18 @@ export default class KanbanArchiverPlugin extends Plugin {
             }
         });
 
+        const templates = this.config.templates || [];
+        templates.forEach((tpl: any) => {
+            this.addCommand({
+                langKey: `generateTemplate_${tpl.id}`,
+                langText: `${this.i18n.generateTemplatePrefix || "生成"}：${tpl.name}`,
+                hotkey: "",
+                callback: () => {
+                    this.generateTemplate(tpl.id);
+                }
+            });
+        });
+
         // Initialize scheduler
         this.initScheduler();
     }
@@ -118,8 +142,11 @@ export default class KanbanArchiverPlugin extends Plugin {
             profiles: [],
             archiveTime: "00:00",
             lastRunDate: "",
+            templates: [],
             ...loaded
         };
+        this.ensureDefaultTemplates();
+        this.normalizeTemplates();
 
         if (!this.config.profiles || !Array.isArray(this.config.profiles)) {
             this.config.profiles = [];
@@ -162,6 +189,64 @@ export default class KanbanArchiverPlugin extends Plugin {
         }
     }
 
+    private ensureDefaultTemplates() {
+        if (!this.config.templates || !Array.isArray(this.config.templates) || this.config.templates.length === 0) {
+            this.config.templates = [
+                {
+                    id: this.generateUUID(),
+                    name: this.i18n.defaultDailyTemplate || "今日汇总",
+                    period: "day",
+                    ruleIds: [],
+                    notebookId: "",
+                    pathTemplate: "",
+                    clipboardOnlySections: false,
+                    titleTemplate: "日报 ({date})",
+                    sections: [
+                        { id: this.generateUUID(), title: "待办", statuses: ["待办", "todo", "backlog", "未开始"] },
+                        { id: this.generateUUID(), title: "进行中", statuses: ["进行中", "doing", "inprogress"] },
+                        { id: this.generateUUID(), title: "已完成", statuses: ["已完成", "done", "完成", "finish", "ok", "归档", "archived"] }
+                    ]
+                },
+                {
+                    id: this.generateUUID(),
+                    name: this.i18n.defaultWeeklyTemplate || "本周回顾",
+                    period: "week",
+                    ruleIds: [],
+                    notebookId: "",
+                    pathTemplate: "",
+                    clipboardOnlySections: false,
+                    titleTemplate: "周报 ({date})",
+                    sections: [
+                        { id: this.generateUUID(), title: "当前工作", statuses: ["进行中", "doing", "inprogress"] },
+                        { id: this.generateUUID(), title: "已完成及归档 (本周)", statuses: ["已完成", "done", "完成", "finish", "ok", "归档", "archived"] },
+                        { id: this.generateUUID(), title: "下周工作计划", statuses: ["待办", "todo", "backlog", "未开始"] }
+                    ]
+                }
+            ];
+            this.saveData("config.json", this.config);
+        }
+    }
+
+    private normalizeTemplates() {
+        if (!Array.isArray(this.config.templates)) return;
+        let mutated = false;
+        this.config.templates.forEach((tpl: any) => {
+            if (!tpl.period && tpl.type) {
+                tpl.period = tpl.type === "weekly" ? "week" : "day";
+                mutated = true;
+            }
+            if (!tpl.period) {
+                tpl.period = "none";
+                mutated = true;
+            }
+            if (!tpl.sections) {
+                tpl.sections = [];
+                mutated = true;
+            }
+        });
+        if (mutated) this.saveData("config.json", this.config);
+    }
+
     async reloadConfig() {
         await this.loadAndNormalizeConfig();
     }
@@ -171,7 +256,7 @@ export default class KanbanArchiverPlugin extends Plugin {
     }
 
     onunload() {
-        console.log("Unloading Kanban Archiver Plugin");
+        console.log("Unloading Kanban Workflow Plugin");
         if (this.timer) {
             clearInterval(this.timer);
             this.timer = null;
@@ -179,14 +264,14 @@ export default class KanbanArchiverPlugin extends Plugin {
     }
 
     uninstall() {
-        console.log("Uninstalling Kanban Archiver Plugin");
+        console.log("Uninstalling Kanban Workflow Plugin");
         this.removeData("config.json");
         this.removeData("undo_history.json");
     }
 
     openSetting() {
         const dialog = new Dialog({
-            title: this.i18n.settingTitle || "看板自动归档设置",
+            title: this.i18n.settingTitle || "看板工作流设置",
             content: "<div id='kanban-archiver-settings' style='height: 100%;'></div>",
             width: "70vw",
             height: "80vh",
@@ -210,6 +295,16 @@ export default class KanbanArchiverPlugin extends Plugin {
             click: () => {
                 this.archiveNow();
             }
+        });
+        const templates = this.config.templates || [];
+        templates.forEach((tpl: any) => {
+            menu.addItem({
+                icon: "iconCalendar",
+                label: `${this.i18n.generateTemplatePrefix || "生成"}：${tpl.name}`,
+                click: () => {
+                    this.generateTemplate(tpl.id);
+                }
+            });
         });
         menu.addItem({
             icon: "iconUndo",
@@ -281,6 +376,9 @@ export default class KanbanArchiverPlugin extends Plugin {
     }
 
     public async archiveNow() {
+        if (!window.confirm(this.i18n.confirmArchiveNow || "确认立即归档当前规则对应的任务？")) {
+            return;
+        }
         try {
             const ids = await archiveKanbanTasks(this, true);
             if (ids && ids.length > 0) {
@@ -308,6 +406,44 @@ export default class KanbanArchiverPlugin extends Plugin {
         } catch (e) {
             console.error("Undo archive task error:", e);
         }
+    }
+
+    public async generateTemplate(templateId: string) {
+        const tpl = (this.config.templates || []).find((t: any) => t.id === templateId);
+        if (!tpl) return;
+        await generateTemplateReport(this, tpl);
+    }
+
+    public async getNotebooks() {
+        return await lsNotebooks();
+    }
+
+    public async getStatusOptions(ruleIds: string[]): Promise<string[]> {
+        const profiles = this.config.profiles || [];
+        const statuses: Set<string> = new Set();
+        for (const rid of ruleIds) {
+            const profile = profiles.find((p: any) => p.id === rid);
+            if (!profile?.keyword) continue;
+            const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${profile.keyword}%' AND type = 'd' LIMIT 1`);
+            if (!docResult || docResult.length === 0) continue;
+            const docId = docResult[0].id;
+            const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${docId}' AND type = 'av' LIMIT 1`);
+            if (!avBlockResult || avBlockResult.length === 0) continue;
+            const avBlock = avBlockResult[0];
+            const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
+            if (!avIdMatch) continue;
+            const avId = avIdMatch[1];
+            const keys = await getAttributeViewKeysByAvID(avId);
+            if (!keys) continue;
+            for (const key of keys) {
+                if ((key.type === "select" || key.type === "mSelect") && key.options) {
+                    key.options.forEach((opt: any) => {
+                        if (opt?.name) statuses.add(opt.name);
+                    });
+                }
+            }
+        }
+        return Array.from(statuses);
     }
 
     private generateUUID() {
