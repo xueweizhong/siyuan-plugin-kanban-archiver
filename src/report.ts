@@ -126,11 +126,25 @@ function extractBlockId(v: any, depth = 0): string {
         }
         return "";
     }
-    if (typeof v !== "object") return "";
+    if (typeof v !== "object") {
+        if (typeof v === "string") {
+            const m = v.match(/\d{14}-[a-z0-9]{7}/i);
+            if (m) return m[0];
+        }
+        return "";
+    }
     if (v.block?.id) return v.block.id;
     if (v.blockID) return v.blockID;
+    if (v.blockId) return v.blockId;
+    if (v.block_id) return v.block_id;
+    if (v.refID) return v.refID;
     if (v.id && typeof v.id === "string" && v.id.length >= 20) return v.id;
     for (const key of Object.keys(v)) {
+        const val = (v as any)[key];
+        if (typeof val === "string" && /block/i.test(key)) {
+            const m = val.match(/\d{14}-[a-z0-9]{7}/i);
+            if (m) return m[0];
+        }
         const found = extractBlockId(v[key], depth + 1);
         if (found) return found;
     }
@@ -425,13 +439,23 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                 const finalValues = cells === valuesCells ? valuesFromValues : valuesFromCells;
                 const contentCell = cIdx !== -1 ? cells[cIdx] : null;
                 const contentBlockId = extractBlockId(contentCell) || extractBlockId(raw?.block) || extractBlockId(raw);
-                const contentFromRow = raw?.block?.content || raw?.content || raw?.name || "";
+                const contentFromRow =
+                    raw?.block?.content ||
+                    raw?.content ||
+                    raw?.name ||
+                    raw?.title?.content ||
+                    raw?.title ||
+                    raw?.text?.content ||
+                    raw?.text ||
+                    raw?.value?.content ||
+                    "";
                 return {
                     id: raw.id,
                     cells,
                     cellValues: finalValues,
                     contentBlockId,
                     contentFromRow,
+                    rawPreview: raw,
                     updatedAt: raw.updatedAt || raw.updated || 0,
                     groupStatus: raw.__groupStatus || ""
                 };
@@ -441,6 +465,7 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                 allRows
                     .map((r: any) => r.contentBlockId || "")
                     .filter(Boolean)
+                    .concat(allRows.map((r: any) => r.id || "").filter((id: string) => /\d{14}-[a-z0-9]{7}/i.test(id)))
             );
 
             const sections = (template.sections || []).map((s: any) => ({
@@ -455,7 +480,14 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
 
             allRows.forEach((row: any, idx: number) => {
                 const cellValues = row.cellValues || row.cells.map((c: any) => extractCellValue(c));
-                if (idx === 0) console.log("[KanbanWorkflow][Report] sampleRow:", cellValues);
+                if (idx === 0) {
+                    console.log("[KanbanWorkflow][Report] sampleRow:", cellValues);
+                    const raw = row.rawPreview || {};
+                    console.log("[KanbanWorkflow][Report] sampleRowKeys:", Object.keys(raw));
+                    if (!cellValues.length && !row.contentFromRow) {
+                        console.log("[KanbanWorkflow][Report] sampleRowRaw:", raw);
+                    }
+                }
                 let text = cIdx !== -1 ? cellValues[cIdx] : "";
                 if (!text && row.contentFromRow) {
                     text = row.contentFromRow;
