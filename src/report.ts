@@ -1,4 +1,4 @@
-import { appendBlock, createDocWithMd, deleteBlock, lsNotebooks, renderAttributeView, setBlockAttrs, sql, pushErrMsg, pushMsg } from "./api";
+import { appendBlock, createDocWithMd, deleteBlock, lsNotebooks, renderAttributeView, setBlockAttrs, sql, pushErrMsg, pushMsg, getAttributeViewBoundBlockIDsByItemIDs } from "./api";
 
 function extractCellValue(v: any): string {
     if (!v) return "";
@@ -162,6 +162,46 @@ async function fetchBlockContents(ids: string[]): Promise<Record<string, string>
         if (rows && rows.length > 0) {
             rows.forEach((r: any) => {
                 if (r?.id && r?.content !== undefined) result[r.id] = r.content;
+            });
+        }
+    }
+    return result;
+}
+
+async function mapItemIdsToBlockIds(avId: string, itemIds: string[]): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    const unique = Array.from(new Set(itemIds)).filter(Boolean);
+    const chunkSize = 100;
+    for (let i = 0; i < unique.length; i += chunkSize) {
+        const chunk = unique.slice(i, i + chunkSize);
+        if (chunk.length === 0) continue;
+        const res = await getAttributeViewBoundBlockIDsByItemIDs(avId, chunk);
+        if (Array.isArray(res)) {
+            res.forEach((r: any) => {
+                if (r?.itemID && r?.blockID) result[r.itemID] = r.blockID;
+                if (r?.itemId && r?.blockId) result[r.itemId] = r.blockId;
+                if (r?.id && r?.blockID) result[r.id] = r.blockID;
+            });
+        } else if (Array.isArray(res?.data)) {
+            res.data.forEach((r: any) => {
+                if (r?.itemID && r?.blockID) result[r.itemID] = r.blockID;
+                if (r?.itemId && r?.blockId) result[r.itemId] = r.blockId;
+                if (r?.id && r?.blockID) result[r.id] = r.blockID;
+            });
+        } else if (res?.blockIDs && Array.isArray(res.blockIDs) && Array.isArray(res.itemIDs)) {
+            res.itemIDs.forEach((itemID: string, idx: number) => {
+                const blockID = res.blockIDs[idx];
+                if (itemID && blockID) result[itemID] = blockID;
+            });
+        } else if (res?.data?.blockIDs && Array.isArray(res.data.blockIDs) && Array.isArray(res.data.itemIDs)) {
+            res.data.itemIDs.forEach((itemID: string, idx: number) => {
+                const blockID = res.data.blockIDs[idx];
+                if (itemID && blockID) result[itemID] = blockID;
+            });
+        } else if (res?.data?.blockIDs && Array.isArray(res.data.blockIDs) && Array.isArray(res.data.itemId)) {
+            res.data.itemId.forEach((itemID: string, idx: number) => {
+                const blockID = res.data.blockIDs[idx];
+                if (itemID && blockID) result[itemID] = blockID;
             });
         }
     }
@@ -346,13 +386,13 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
             return;
         }
 
-        const allBoards: Array<{ profileName: string; avData: any }> = [];
+        const allBoards: Array<{ profileName: string; avData: any; avId: string }> = [];
         for (const pid of selectedIds) {
             const resolved = await resolveAvFromProfile(plugin, pid);
             if (!resolved.avId) continue;
             const avData = await renderAttributeView(resolved.avId, resolved.viewId || resolved.avId, 2000, 1);
             if (!avData) continue;
-            allBoards.push({ profileName: resolved.profileName, avData });
+            allBoards.push({ profileName: resolved.profileName, avData, avId: resolved.avId });
         }
         if (allBoards.length === 0) {
             pushErrMsg(t("reportMissingKanban", "请先选择至少一个归档规则"));
@@ -423,9 +463,13 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
             const allRows = collectRows(avData).map((raw: any) => {
                 let cells = raw.cells || [];
                 let valuesCells: any[] = [];
+                let contentValueObj: any = null;
                 if (raw.values) {
                     valuesCells = columns.map((col: any) => {
-                        const vObj = raw.values.find((v: any) => v.keyID === col.id);
+                        const vObj = raw.values.find((v: any) => v.keyID === col.id || v?.value?.keyID === col.id);
+                        if (cIdx !== -1 && col.id === columns[cIdx]?.id) {
+                            contentValueObj = vObj?.value ?? null;
+                        }
                         return vObj ? vObj.value : null;
                     });
                 }
@@ -438,7 +482,11 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                 }
                 const finalValues = cells === valuesCells ? valuesFromValues : valuesFromCells;
                 const contentCell = cIdx !== -1 ? cells[cIdx] : null;
-                const contentBlockId = extractBlockId(contentCell) || extractBlockId(raw?.block) || extractBlockId(raw);
+                const contentBlockId =
+                    extractBlockId(contentCell) ||
+                    extractBlockId(contentValueObj) ||
+                    extractBlockId(raw?.block) ||
+                    extractBlockId(raw);
                 const contentFromRow =
                     raw?.block?.content ||
                     raw?.content ||
@@ -448,6 +496,7 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                     raw?.text?.content ||
                     raw?.text ||
                     raw?.value?.content ||
+                    (contentValueObj ? extractCellValue(contentValueObj) : "") ||
                     "";
                 return {
                     id: raw.id,
@@ -455,17 +504,22 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                     cellValues: finalValues,
                     contentBlockId,
                     contentFromRow,
+                    contentValueObj,
                     rawPreview: raw,
                     updatedAt: raw.updatedAt || raw.updated || 0,
                     groupStatus: raw.__groupStatus || ""
                 };
             });
 
+            const itemIdToBlockId = await mapItemIdsToBlockIds(
+                board.avId,
+                allRows.map((r: any) => r.id || "").filter(Boolean)
+            );
             const blockIdMap = await fetchBlockContents(
                 allRows
                     .map((r: any) => r.contentBlockId || "")
                     .filter(Boolean)
-                    .concat(allRows.map((r: any) => r.id || "").filter((id: string) => /\d{14}-[a-z0-9]{7}/i.test(id)))
+                    .concat(Object.values(itemIdToBlockId))
             );
 
             const sections = (template.sections || []).map((s: any) => ({
@@ -487,13 +541,33 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                     if (!cellValues.length && !row.contentFromRow) {
                         console.log("[KanbanWorkflow][Report] sampleRowRaw:", raw);
                     }
+                    if (!row.contentFromRow && row.contentBlockId) {
+                        console.log("[KanbanWorkflow][Report] sampleContentBlockId:", row.contentBlockId);
+                    }
+                    if (row.contentValueObj) {
+                        console.log("[KanbanWorkflow][Report] sampleContentValueObj:", row.contentValueObj);
+                        console.log("[KanbanWorkflow][Report] sampleContentValueExtract:", extractCellValue(row.contentValueObj));
+                    }
+                    if (row.id && itemIdToBlockId[row.id]) {
+                        console.log("[KanbanWorkflow][Report] sampleItemToBlock:", row.id, "->", itemIdToBlockId[row.id]);
+                    }
+                    if (raw.values) {
+                        console.log("[KanbanWorkflow][Report] sampleRowValues:", raw.values);
+                        console.log("[KanbanWorkflow][Report] sampleColumns:", columns);
+                    }
                 }
                 let text = cIdx !== -1 ? cellValues[cIdx] : "";
                 if (!text && row.contentFromRow) {
                     text = row.contentFromRow;
                 }
+                if (!text && row.contentBlockId && itemIdToBlockId[row.contentBlockId] && blockIdMap[itemIdToBlockId[row.contentBlockId]]) {
+                    text = blockIdMap[itemIdToBlockId[row.contentBlockId]];
+                }
                 if (!text && row.contentBlockId && blockIdMap[row.contentBlockId]) {
                     text = blockIdMap[row.contentBlockId];
+                }
+                if (!text && row.id && itemIdToBlockId[row.id] && blockIdMap[itemIdToBlockId[row.id]]) {
+                    text = blockIdMap[itemIdToBlockId[row.id]];
                 }
                 if (!text) {
                     const fallback = cellValues.find((v: any, i: number) => {
