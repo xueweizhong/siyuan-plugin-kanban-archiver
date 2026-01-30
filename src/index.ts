@@ -1,6 +1,6 @@
 import { Plugin, Protyle, Dialog, Menu } from "siyuan";
 import { archiveKanbanTasks, restoreKanbanTasks } from "./api/kanban";
-import { getAttributeViewKeysByAvID, lsNotebooks, sql } from "./api";
+import { getAttributeViewKeysByAvID, lsNotebooks, sql, pushMsg } from "./api";
 import { setPluginInstance } from "./utils/i18n";
 import Settings from "./Settings.svelte";
 import { generateTemplateReport } from "./report";
@@ -362,7 +362,7 @@ export default class KanbanWorkflowPlugin extends Plugin {
         if (currentTimeVal >= configTimeVal) {
             this.config.lastRunDate = today;
             this.saveData("config.json", this.config);
-            this.archiveNow();
+            this.archiveNow(false);
         }
     }
 
@@ -375,18 +375,23 @@ export default class KanbanWorkflowPlugin extends Plugin {
         await this.saveData("undo_history.json", this.undoStack);
     }
 
-    public async archiveNow() {
-        if (!window.confirm(this.i18n.confirmArchiveNow || "确认立即归档当前规则对应的任务？")) {
-            return;
+    public async archiveNow(manual: boolean = true) {
+        if (manual) {
+            if (!window.confirm(this.i18n.confirmArchiveNow || "确认立即归档当前规则对应的任务？")) {
+                return;
+            }
         }
         try {
-            const ids = await archiveKanbanTasks(this, true);
+            const ids = await archiveKanbanTasks(this, manual);
             if (ids && ids.length > 0) {
                 this.undoStack.push({
                     date: new Date().getTime(),
                     ids: ids
                 });
                 await this.saveUndoHistory();
+            } else {
+                const msg = this.i18n.archiveEmpty || "未发现可归档任务";
+                pushMsg(msg);
             }
         } catch (e) {
             console.error("Archive task error:", e);

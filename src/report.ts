@@ -2,6 +2,7 @@ import { appendBlock, createDocWithMd, deleteBlock, lsNotebooks, renderAttribute
 
 function extractCellValue(v: any): string {
     if (!v) return "";
+    if (Array.isArray(v)) return v.map((i: any) => extractCellValue(i)).filter(Boolean).join(", ");
     if (typeof v === "string") return v;
     if (typeof v === "number") return v.toString();
     if (v.content !== undefined) return v.content;
@@ -48,14 +49,47 @@ function resolveTimestamp(raw: any): number {
     return 0;
 }
 
-function collectRows(obj: any): any[] {
+function getGroupLabel(obj: any): string {
+    if (!obj || typeof obj !== "object") return "";
+    if (typeof obj.name === "string") return obj.name;
+    if (typeof obj.title === "string") return obj.title;
+    if (typeof obj.label === "string") return obj.label;
+    if (obj.value) {
+        const v = extractCellValue(obj.value);
+        if (v) return v;
+    }
+    if (obj.key) {
+        const v = extractCellValue(obj.key);
+        if (v) return v;
+        if (typeof obj.key.name === "string") return obj.key.name;
+    }
+    return "";
+}
+
+function collectRows(obj: any, groupStatus = ""): any[] {
     let res: any[] = [];
     if (!obj || typeof obj !== "object") return res;
-    if (obj.id && (Array.isArray(obj.cells) || Array.isArray(obj.values))) res.push(obj);
+    if (obj.id && (Array.isArray(obj.cells) || Array.isArray(obj.values))) {
+        if (groupStatus) {
+            obj.__groupStatus = groupStatus;
+        }
+        res.push(obj);
+    }
     for (const k in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, k)) {
-            if (Array.isArray(obj[k])) obj[k].forEach((i: any) => res = res.concat(collectRows(i)));
-            else if (typeof obj[k] === "object" && !["columns", "fields", "keyValues"].includes(k)) res = res.concat(collectRows(obj[k]));
+            const child = obj[k];
+            if (Array.isArray(child)) {
+                if (k === "groups") {
+                    child.forEach((g: any) => {
+                        const label = getGroupLabel(g) || groupStatus;
+                        res = res.concat(collectRows(g, label));
+                    });
+                } else {
+                    child.forEach((i: any) => res = res.concat(collectRows(i, groupStatus)));
+                }
+            } else if (typeof child === "object" && !["columns", "fields", "keyValues"].includes(k)) {
+                res = res.concat(collectRows(child, groupStatus));
+            }
         }
     }
     return res;
@@ -73,6 +107,51 @@ function formatDate(date: Date): string {
 
 function stripEmoji(str = ""): string {
     return str.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}]/gu, "");
+}
+
+function normalizeStatus(input: any): string {
+    return stripEmoji(String(input || "")).toLowerCase().trim();
+}
+
+function escapeSqlValue(input: any): string {
+    return String(input ?? "").replace(/'/g, "''");
+}
+
+function extractBlockId(v: any, depth = 0): string {
+    if (!v || depth > 4) return "";
+    if (Array.isArray(v)) {
+        for (const item of v) {
+            const found = extractBlockId(item, depth + 1);
+            if (found) return found;
+        }
+        return "";
+    }
+    if (typeof v !== "object") return "";
+    if (v.block?.id) return v.block.id;
+    if (v.blockID) return v.blockID;
+    if (v.id && typeof v.id === "string" && v.id.length >= 20) return v.id;
+    for (const key of Object.keys(v)) {
+        const found = extractBlockId(v[key], depth + 1);
+        if (found) return found;
+    }
+    return "";
+}
+
+async function fetchBlockContents(ids: string[]): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    const unique = Array.from(new Set(ids)).filter(Boolean);
+    const chunkSize = 100;
+    for (let i = 0; i < unique.length; i += chunkSize) {
+        const chunk = unique.slice(i, i + chunkSize).map(id => `'${escapeSqlValue(id)}'`).join(",");
+        if (!chunk) continue;
+        const rows = await sql(`SELECT id, content FROM blocks WHERE id IN (${chunk})`);
+        if (rows && rows.length > 0) {
+            rows.forEach((r: any) => {
+                if (r?.id && r?.content !== undefined) result[r.id] = r.content;
+            });
+        }
+    }
+    return result;
 }
 
 function mdToPlain(md = ""): string {
@@ -191,8 +270,10 @@ function buildPath(template: any, date: Date): string {
 
 async function writeToDoc(plugin: any, template: any, date: Date, md: string, memo: string, title: string): Promise<void> {
     const hpath = buildPath(template, date);
+    const hpathSql = escapeSqlValue(hpath);
+    const hpathSqlAlt = escapeSqlValue(hpath.substring(1));
 
-    let docRes = await sql(`SELECT id FROM blocks WHERE (hpath = '${hpath}' OR hpath = '${hpath.substring(1)}') AND type='d' LIMIT 1`);
+    let docRes = await sql(`SELECT id FROM blocks WHERE (hpath = '${hpathSql}' OR hpath = '${hpathSqlAlt}') AND type='d' LIMIT 1`);
     let docId = docRes && docRes.length > 0 ? docRes[0].id : "";
     if (!docId) {
         const nbRes = await lsNotebooks();
@@ -205,32 +286,12 @@ async function writeToDoc(plugin: any, template: any, date: Date, md: string, me
         await new Promise(r => setTimeout(r, 600));
     }
 
-    const toDelete: any[] = [];
-    const resMemo = await sql(`SELECT id FROM blocks WHERE memo = '${memo}' AND root_id = '${docId}'`);
-    if (resMemo) toDelete.push(...resMemo);
-
-    const resTitle = await sql(`SELECT id, parent_id, content FROM blocks WHERE root_id = '${docId}' AND content LIKE '%${title}%' AND type='h'`);
-    if (resTitle && resTitle.length > 0) {
-        const orderRes = await sql(`SELECT id, content, type FROM blocks WHERE root_id = '${docId}' ORDER BY sort ASC`);
-        const order = orderRes || [];
-        const idToIdx = new Map(order.map((b: any, i: number) => [b.id, i]));
-
-        for (const item of resTitle) {
-            const start = idToIdx.has(item.id) ? idToIdx.get(item.id) as number : -1;
-            if (start === -1) continue;
-            for (let i = start; i < order.length; i++) {
-                const blk = order[i];
-                if (i > start && blk.type === "h") break;
-                toDelete.push(blk);
-            }
-        }
-    }
-
-    const uniqueIds = Array.from(new Set(toDelete.map((b: any) => b.id))).filter(Boolean);
-    for (const id of uniqueIds) {
+    const allBlocks = await sql(`SELECT id FROM blocks WHERE root_id = '${docId}'`);
+    const clearIds = (allBlocks || []).map((b: any) => b.id).filter((id: string) => id && id !== docId);
+    for (const id of clearIds) {
         await deleteBlock(id);
     }
-    if (uniqueIds.length > 0) await new Promise(r => setTimeout(r, 300));
+    if (clearIds.length > 0) await new Promise(r => setTimeout(r, 300));
 
     const result = await appendBlock("markdown", md, docId);
     if (result && result.length > 0) {
@@ -303,9 +364,10 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
             const dataRoot = avData.view || avData;
             const rawColumns = dataRoot.columns || dataRoot.fields || [];
             const columns = rawColumns.map((c: any) => {
-                const k = c.key || c;
+                const k = c?.key ?? c;
+                if (!k) return null;
                 return { id: k.id, name: k.name || "", type: k.type || "" };
-            });
+            }).filter(Boolean) as Array<{ id: string; name: string; type: string }>;
 
             const pickIdx = (preds: Array<(c: any) => boolean>) => columns.findIndex(c => preds.some(p => p(c)));
             const cIdx = pickIdx([
@@ -313,10 +375,16 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                 c => c.name.toLowerCase().includes("content"),
                 c => c.type === "block"
             ]);
-            const sIdx = pickIdx([
+            let sIdx = pickIdx([
                 c => c.name.includes("状态"),
                 c => c.name.toLowerCase().includes("status")
             ]);
+            if (sIdx === -1) {
+                sIdx = columns.findIndex(c => {
+                    const t = String(c.type || "").toLowerCase();
+                    return t === "select" || t === "mselect" || t === "multiselect" || t === "singleselect";
+                });
+            }
             let tIdx = pickIdx([
                 c => c.name.includes("更新时间"),
                 c => c.name.toLowerCase().includes("update"),
@@ -335,27 +403,76 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                 c => c.type === "date"
             ]);
 
+            console.log("[KanbanWorkflow][Report] columns:", columns.map(c => `${c.name}(${c.type || "unknown"})`));
+            console.log("[KanbanWorkflow][Report] idx:", { cIdx, sIdx, tIdx });
+
             const allRows = collectRows(avData).map((raw: any) => {
                 let cells = raw.cells || [];
-                if (!raw.cells && raw.values) {
-                    cells = columns.map((col: any) => {
+                let valuesCells: any[] = [];
+                if (raw.values) {
+                    valuesCells = columns.map((col: any) => {
                         const vObj = raw.values.find((v: any) => v.keyID === col.id);
                         return vObj ? vObj.value : null;
                     });
                 }
-                return { id: raw.id, cells, updatedAt: raw.updatedAt || raw.updated || 0 };
+                const valuesFromCells = (cells || []).map((c: any) => extractCellValue(c));
+                const valuesFromValues = (valuesCells || []).map((c: any) => extractCellValue(c));
+                const hasCells = valuesFromCells.some((v: any) => String(v || "").trim() !== "");
+                const hasValues = valuesFromValues.some((v: any) => String(v || "").trim() !== "");
+                if (!hasCells && hasValues) {
+                    cells = valuesCells;
+                }
+                const finalValues = cells === valuesCells ? valuesFromValues : valuesFromCells;
+                const contentCell = cIdx !== -1 ? cells[cIdx] : null;
+                const contentBlockId = extractBlockId(contentCell) || extractBlockId(raw?.block) || extractBlockId(raw);
+                const contentFromRow = raw?.block?.content || raw?.content || raw?.name || "";
+                return {
+                    id: raw.id,
+                    cells,
+                    cellValues: finalValues,
+                    contentBlockId,
+                    contentFromRow,
+                    updatedAt: raw.updatedAt || raw.updated || 0,
+                    groupStatus: raw.__groupStatus || ""
+                };
             });
+
+            const blockIdMap = await fetchBlockContents(
+                allRows
+                    .map((r: any) => r.contentBlockId || "")
+                    .filter(Boolean)
+            );
 
             const sections = (template.sections || []).map((s: any) => ({
                 id: s.id,
                 title: s.title,
-                statuses: (s.statuses || []).map((v: string) => String(v).toLowerCase()),
+                statusesRaw: (s.statuses || []).map((v: string) => String(v)),
+                statuses: (s.statuses || []).map((v: string) => normalizeStatus(v)).filter(Boolean),
                 items: [] as string[]
             }));
+            const statusCandidates = sections.flatMap((s: any) => s.statuses).filter(Boolean);
+            console.log("[KanbanWorkflow][Report] statusCandidates:", statusCandidates);
 
-            allRows.forEach((row: any) => {
-                const cellValues = row.cells.map((c: any) => extractCellValue(c));
-                let text = cIdx !== -1 ? cellValues[cIdx] : t("reportFallbackContent", "无内容");
+            allRows.forEach((row: any, idx: number) => {
+                const cellValues = row.cellValues || row.cells.map((c: any) => extractCellValue(c));
+                if (idx === 0) console.log("[KanbanWorkflow][Report] sampleRow:", cellValues);
+                let text = cIdx !== -1 ? cellValues[cIdx] : "";
+                if (!text && row.contentFromRow) {
+                    text = row.contentFromRow;
+                }
+                if (!text && row.contentBlockId && blockIdMap[row.contentBlockId]) {
+                    text = blockIdMap[row.contentBlockId];
+                }
+                if (!text) {
+                    const fallback = cellValues.find((v: any, i: number) => {
+                        if (i === sIdx || i === tIdx) return false;
+                        return String(v || "").trim() !== "";
+                    });
+                    text = fallback || "";
+                }
+                if (!text) {
+                    text = t("reportFallbackContent", "无内容");
+                }
 
                 if (period === "week") {
                     text = text.replace(/\b\d+(\.\d+)?\s*[hH]\b/gi, "").replace(/\((?:\d\.?)+[hH]\)/g, "").trim();
@@ -364,22 +481,45 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                     }
                 }
 
-                const status = sIdx !== -1 ? cellValues[sIdx] : "";
+                let status = sIdx !== -1 ? cellValues[sIdx] : "";
+                if (!status && row.groupStatus) status = row.groupStatus;
+                if (!status) {
+                    const fallback = cellValues.find((v: string) => {
+                        const vL = String(v || "").toLowerCase();
+                        return statusCandidates.some((st: string) => vL.includes(st));
+                    });
+                    status = fallback || "";
+                }
+                if (idx === 0) console.log("[KanbanWorkflow][Report] sampleStatus:", status);
                 const attrTimeStr = tIdx !== -1 ? cellValues[tIdx] : "";
                 const attrTs = resolveTimestamp(attrTimeStr);
                 const updTs = resolveTimestamp(row.updatedAt);
                 const finalTime = period !== "none" ? (attrTs || updTs || 0) : (attrTs || updTs || Date.now());
 
-                const sL = (status || "").toLowerCase();
+                const sL = normalizeStatus(status);
                 const isDoneLike = sL.includes("已完成") || sL.includes("done") || sL.includes("完成") || sL.includes("finish") || sL.includes("ok");
                 const isArchivedLike = sL.includes("归档") || sL.includes("archived") || sL.includes("存档") || sL.includes("archive");
                 const shouldPeriodFilter = period !== "none" && (isDoneLike || isArchivedLike);
                 if (shouldPeriodFilter && finalTime < periodStart) return;
 
-                const line = `${isDoneLike ? "* [x]" : "* [ ]"} ${text}`;
-                const matched = sections.filter((s: any) => s.statuses.length > 0 && s.statuses.some((st: string) => sL.includes(st)));
+                const line = `${isDoneLike ? "* [x]" : "* [ ]"} ${text}`.trim();
+                const statusTokens = sL.split(/[,，]/).map(v => v.trim()).filter(Boolean);
+                const matchedNormalized = sections.filter((s: any) => s.statuses.length > 0 && s.statuses.some((st: string) => {
+                    if (!st) return false;
+                    if (sL.includes(st)) return true;
+                    return statusTokens.some(tok => tok.includes(st) || st.includes(tok));
+                }));
+                let matched = matchedNormalized;
+                if (matched.length === 0) {
+                    const sRaw = String(status || "").toLowerCase();
+                    matched = sections.filter((s: any) => (s.statusesRaw || []).some((st: string) => {
+                        const stL = String(st || "").toLowerCase();
+                        if (!stL) return false;
+                        return sRaw.includes(stL) || stL.includes(sRaw);
+                    }));
+                }
                 if (matched.length === 0) return;
-                matched[0].items.push(line);
+                matched.forEach((s: any) => s.items.push(line));
             });
 
             const boardTitle = `${t("reportBoardTitle", "看板")}: ${board.profileName}`;
