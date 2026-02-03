@@ -340,12 +340,14 @@ async function writeToDoc(plugin: any, template: any, date: Date, md: string, me
         await new Promise(r => setTimeout(r, 600));
     }
 
-    const allBlocks = await sql(`SELECT id FROM blocks WHERE root_id = '${docId}'`);
-    const clearIds = (allBlocks || []).map((b: any) => b.id).filter((id: string) => id && id !== docId);
-    for (const id of clearIds) {
-        await deleteBlock(id);
+    if (!template.appendMode) {
+        const allBlocks = await sql(`SELECT id FROM blocks WHERE root_id = '${docId}'`);
+        const clearIds = (allBlocks || []).map((b: any) => b.id).filter((id: string) => id && id !== docId);
+        for (const id of clearIds) {
+            await deleteBlock(id);
+        }
+        if (clearIds.length > 0) await new Promise(r => setTimeout(r, 300));
     }
-    if (clearIds.length > 0) await new Promise(r => setTimeout(r, 300));
 
     const result = await appendBlock("markdown", md, docId);
     if (result && result.length > 0) {

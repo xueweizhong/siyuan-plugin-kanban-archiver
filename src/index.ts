@@ -15,6 +15,7 @@ export default class KanbanWorkflowPlugin extends Plugin {
     private undoStack: any[] = [];
     private readonly MAX_UNDO_COUNT = 30;
     private readonly MAX_UNDO_DAYS = 7;
+    private readonly SCHEDULE_CHECK_INTERVAL = 60 * 1000;
 
     async onload() {
         setPluginInstance(this);
@@ -183,7 +184,25 @@ export default class KanbanWorkflowPlugin extends Plugin {
                 p.enabled = true;
                 changed = true;
             }
+            if (!p.schedule) {
+                p.schedule = this.createDefaultSchedule();
+                changed = true;
+            }
         });
+        // Migrate legacy global archive time to each profile schedule
+        if (loaded && loaded.archiveTime && this.config.profiles.length > 0) {
+            this.config.profiles.forEach((p: any) => {
+                if (p.schedule) {
+                    p.schedule.mode = p.schedule.mode || "daily";
+                    p.schedule.time = p.schedule.time || loaded.archiveTime || "00:00";
+                    p.schedule.enabled = p.schedule.enabled !== undefined ? p.schedule.enabled : true;
+                    if (!p.schedule.nextRunAt) {
+                        p.schedule.nextRunAt = 0;
+                    }
+                }
+            });
+            changed = true;
+        }
         if (changed) {
             this.saveData("config.json", this.config);
         }
@@ -199,6 +218,7 @@ export default class KanbanWorkflowPlugin extends Plugin {
                     ruleIds: [],
                     notebookId: "",
                     pathTemplate: "",
+                    appendMode: false,
                     clipboardOnlySections: false,
                     titleTemplate: "日报 ({date})",
                     sections: [
@@ -214,6 +234,7 @@ export default class KanbanWorkflowPlugin extends Plugin {
                     ruleIds: [],
                     notebookId: "",
                     pathTemplate: "",
+                    appendMode: false,
                     clipboardOnlySections: false,
                     titleTemplate: "周报 ({date})",
                     sections: [
@@ -237,6 +258,10 @@ export default class KanbanWorkflowPlugin extends Plugin {
             }
             if (!tpl.period) {
                 tpl.period = "none";
+                mutated = true;
+            }
+            if (tpl.appendMode === undefined) {
+                tpl.appendMode = false;
                 mutated = true;
             }
             if (!tpl.sections) {
@@ -329,41 +354,127 @@ export default class KanbanWorkflowPlugin extends Plugin {
         this.checkAndRunArchive();
         this.timer = setInterval(() => {
             this.checkAndRunArchive();
-        }, 60 * 1000);
+        }, this.SCHEDULE_CHECK_INTERVAL);
     }
 
     private checkAndRunArchive() {
-        if (!this.config.archiveTime) return;
-
+        const profiles = this.config.profiles || [];
+        if (profiles.length === 0) return;
         const now = new Date();
-        const hours = now.getHours();
-        const minutes = now.getMinutes();
-        const currentTimeVal = hours * 60 + minutes;
+        let mutated = false;
 
-        let configHours = 0;
-        let configMinutes = 0;
-        try {
-            const parts = this.config.archiveTime.split(':').map(Number);
-            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                configHours = parts[0];
-                configMinutes = parts[1];
+        profiles.forEach((p: any) => {
+            if (!p?.enabled) return;
+            if (!p.schedule) {
+                p.schedule = this.createDefaultSchedule();
+                mutated = true;
             }
-        } catch (e) {
-            return;
+            const sch = p.schedule;
+            if (!sch.enabled) return;
+            if (!sch.nextRunAt || Number.isNaN(sch.nextRunAt)) {
+                sch.nextRunAt = this.computeNextRunAt(sch, now).getTime();
+                mutated = true;
+            }
+            if (now.getTime() >= sch.nextRunAt) {
+                this.archiveNow(false);
+                sch.lastRun = now.toISOString().slice(0, 10);
+                sch.nextRunAt = this.computeNextRunAt(sch, now, true).getTime();
+                mutated = true;
+            }
+        });
+        if (mutated) this.saveData("config.json", this.config);
+    }
+
+    private createDefaultSchedule() {
+        return {
+            enabled: true,
+            mode: "daily",
+            time: "00:00",
+            weekday: 1,
+            monthday: 1,
+            month: 1,
+            lastRun: "",
+            nextRunAt: 0
+        };
+    }
+
+    private parseTime(timeStr: string): { h: number, m: number } {
+        const parts = String(timeStr || "00:00").split(":").map(Number);
+        const h = !isNaN(parts[0]) ? parts[0] : 0;
+        const m = !isNaN(parts[1]) ? parts[1] : 0;
+        return { h, m };
+    }
+
+    private clampDay(year: number, monthIndex: number, day: number): number {
+        const last = new Date(year, monthIndex + 1, 0).getDate();
+        return Math.min(Math.max(1, day), last);
+    }
+
+    private computeNextRunAt(schedule: any, now: Date, afterRun: boolean = false): Date {
+        const { h, m } = this.parseTime(schedule.time);
+        const mode = schedule.mode || "daily";
+        const base = new Date(now);
+        const setTime = (d: Date) => {
+            d.setHours(h, m, 0, 0);
+            return d;
+        };
+
+        if (mode === "daily") {
+            const d = setTime(new Date(base));
+            if (afterRun || d.getTime() <= now.getTime()) d.setDate(d.getDate() + 1);
+            return d;
+        }
+        if (mode === "workday") {
+            const d = setTime(new Date(base));
+            const isWorkday = (dt: Date) => dt.getDay() >= 1 && dt.getDay() <= 5;
+            if (!afterRun && isWorkday(d) && d.getTime() > now.getTime()) return d;
+            let next = new Date(d);
+            do {
+                next.setDate(next.getDate() + 1);
+                setTime(next);
+            } while (!isWorkday(next));
+            return next;
+        }
+        if (mode === "weekly") {
+            const target = Number(schedule.weekday || 1); // 1-7 (Mon-Sun)
+            const current = base.getDay() === 0 ? 7 : base.getDay();
+            let delta = (target - current + 7) % 7;
+            const d = setTime(new Date(base));
+            if (delta === 0 && (afterRun || d.getTime() <= now.getTime())) delta = 7;
+            d.setDate(d.getDate() + delta);
+            return d;
+        }
+        if (mode === "monthly") {
+            const day = Number(schedule.monthday || 1);
+            let y = base.getFullYear();
+            let mo = base.getMonth();
+            let targetDay = this.clampDay(y, mo, day);
+            let d = setTime(new Date(y, mo, targetDay));
+            if (afterRun || d.getTime() <= now.getTime()) {
+                mo += 1;
+                if (mo > 11) { mo = 0; y += 1; }
+                targetDay = this.clampDay(y, mo, day);
+                d = setTime(new Date(y, mo, targetDay));
+            }
+            return d;
+        }
+        if (mode === "yearly") {
+            const month = Number(schedule.month || 1) - 1;
+            const day = Number(schedule.monthday || 1);
+            let y = base.getFullYear();
+            let targetDay = this.clampDay(y, month, day);
+            let d = setTime(new Date(y, month, targetDay));
+            if (afterRun || d.getTime() <= now.getTime()) {
+                y += 1;
+                targetDay = this.clampDay(y, month, day);
+                d = setTime(new Date(y, month, targetDay));
+            }
+            return d;
         }
 
-        const configTimeVal = configHours * 60 + configMinutes;
-        const today = now.toLocaleDateString();
-
-        if (this.config.lastRunDate === today) {
-            return;
-        }
-
-        if (currentTimeVal >= configTimeVal) {
-            this.config.lastRunDate = today;
-            this.saveData("config.json", this.config);
-            this.archiveNow(false);
-        }
+        const fallback = setTime(new Date(base));
+        if (fallback.getTime() <= now.getTime()) fallback.setDate(fallback.getDate() + 1);
+        return fallback;
     }
 
     private async saveUndoHistory() {
@@ -383,6 +494,30 @@ export default class KanbanWorkflowPlugin extends Plugin {
         }
         try {
             const ids = await archiveKanbanTasks(this, manual);
+            if (ids && ids.length > 0) {
+                this.undoStack.push({
+                    date: new Date().getTime(),
+                    ids: ids
+                });
+                await this.saveUndoHistory();
+            } else {
+                const msg = this.i18n.archiveEmpty || "未发现可归档任务";
+                pushMsg(msg);
+            }
+        } catch (e) {
+            console.error("Archive task error:", e);
+        }
+    }
+
+    public async archiveProfileNow(profileId: string, manual: boolean = true) {
+        if (!profileId) return;
+        if (manual) {
+            if (!window.confirm(this.i18n.confirmArchiveNow || "确认立即归档当前规则对应的任务？")) {
+                return;
+            }
+        }
+        try {
+            const ids = await archiveKanbanTasks(this, manual, [profileId]);
             if (ids && ids.length > 0) {
                 this.undoStack.push({
                     date: new Date().getTime(),

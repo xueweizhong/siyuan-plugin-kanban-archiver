@@ -217,13 +217,17 @@ export async function restoreKanbanTasks(plugin: any, taskIds: string[]): Promis
 /**
  * 归档任务
  */
-export async function archiveKanbanTasks(plugin: any, manual: boolean = false): Promise<string[]> {
-    const profiles = plugin.config.profiles || [];
+export async function archiveKanbanTasks(plugin: any, manual: boolean = false, profileIds?: string[]): Promise<string[]> {
+    let profiles = plugin.config.profiles || [];
     let allModifiedIds: string[] = [];
 
     if (profiles.length === 0) {
         if (manual) pushErrMsg("未配置任何归档规则，请在设置中添加");
         return [];
+    }
+
+    if (Array.isArray(profileIds) && profileIds.length > 0) {
+        profiles = profiles.filter((p: any) => profileIds.includes(p.id));
     }
 
     for (const profile of profiles) {

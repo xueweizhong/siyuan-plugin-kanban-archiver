@@ -4,17 +4,27 @@
     export let plugin: any;
 
     let profiles = [];
-    let archiveTime = "00:00";
     let expandedId = null;
     let templates = [];
     let expandedTemplateId = null;
     let notebooks = [];
     let statusOptions = {};
 
-    // Time Picker State
-    let showTimePicker = false;
+    // Time Picker State (per profile)
+    let showTimePickerId = null;
+    let timePickerStyle = "";
+    let activeProfile: any = null;
     const hours = Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0'));
     const minutes = Array.from({length: 60}, (_, i) => i.toString().padStart(2, '0'));
+    const weekdays = [
+        { value: 1, label: "Mon" },
+        { value: 2, label: "Tue" },
+        { value: 3, label: "Wed" },
+        { value: 4, label: "Thu" },
+        { value: 5, label: "Fri" },
+        { value: 6, label: "Sat" },
+        { value: 7, label: "Sun" }
+    ];
 
     onMount(() => {
         refresh();
@@ -26,19 +36,17 @@
 
     function refresh() {
         profiles = plugin.config.profiles || [];
-        archiveTime = plugin.config.archiveTime || "00:00";
+        profiles.forEach(p => ensureSchedule(p));
         templates = plugin.config.templates || [];
     }
 
     async function refreshFromDisk() {
-        showTimePicker = false;
         if (plugin.reloadConfig) {
             await plugin.reloadConfig();
         } else {
             const loaded = await plugin.loadData("config.json");
             plugin.config = {
                 profiles: [],
-                archiveTime: "00:00",
                 lastRunDate: "",
                 templates: [],
                 ...loaded
@@ -48,7 +56,6 @@
     }
 
     async function save() {
-        plugin.config.archiveTime = archiveTime;
         plugin.config.templates = templates;
         plugin.saveData("config.json", plugin.config);
         refresh();
@@ -92,35 +99,63 @@
         });
     }
 
-    // Time Selection Helpers
-    function selectHour(h) {
-        const parts = archiveTime.split(':');
-        archiveTime = `${h}:${parts[1] || '00'}`;
+    function ensureSchedule(profile) {
+        if (!profile.schedule) {
+            profile.schedule = {
+                enabled: true,
+                mode: "daily",
+                time: "00:00",
+                weekday: 1,
+                monthday: 1,
+                month: 1,
+                nextRunAt: 0
+            };
+        }
+        return profile.schedule;
+    }
+
+    function updateSchedule(profile, key, value) {
+        const sch = ensureSchedule(profile);
+        sch[key] = value;
+        sch.nextRunAt = 0;
         save();
     }
 
-    function selectMinute(m) {
-        const parts = archiveTime.split(':');
-        archiveTime = `${parts[0] || '00'}:${m}`;
-        save();
+    function getScheduleTime(profile) {
+        const sch = ensureSchedule(profile);
+        return sch.time || "00:00";
     }
 
-    function scrollToOption(type, value) {
-        const id = `time-opt-${type}-${value}`;
+    function selectHour(profile, h) {
+        const parts = getScheduleTime(profile).split(':');
+        updateSchedule(profile, 'time', `${h}:${parts[1] || '00'}`);
+    }
+
+    function selectMinute(profile, m) {
+        const parts = getScheduleTime(profile).split(':');
+        updateSchedule(profile, 'time', `${parts[0] || '00'}:${m}`);
+    }
+
+    function scrollToOption(type, value, profileId) {
+        const id = `time-opt-${type}-${value}-${profileId}`;
         const el = document.getElementById(id);
         if (el) el.scrollIntoView({block: "center", behavior: "smooth"});
     }
-    
-    function toggleTimePicker() {
-        showTimePicker = !showTimePicker;
-        if (showTimePicker) {
+
+    function toggleTimePicker(profileId, event) {
+        showTimePickerId = showTimePickerId === profileId ? null : profileId;
+        if (showTimePickerId && event?.currentTarget) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            timePickerStyle = `position: fixed; top: ${rect.bottom + 8}px; left: ${rect.left}px;`;
             setTimeout(() => {
-                const [h, m] = archiveTime.split(':');
-                scrollToOption('h', h);
-                scrollToOption('m', m);
+                const [h, m] = getScheduleTime(profiles.find(p => p.id === profileId) || { schedule: { time: "00:00" } }).split(':');
+                scrollToOption('h', h, profileId);
+                scrollToOption('m', m, profileId);
             }, 10);
         }
     }
+
+    $: activeProfile = showTimePickerId ? profiles.find(p => p.id === showTimePickerId) : null;
 
     function generateTemplate(id: string) {
         if (plugin.generateTemplate) plugin.generateTemplate(id);
@@ -140,6 +175,7 @@
             ruleIds: [],
             notebookId: "",
             pathTemplate: "",
+            appendMode: false,
             clipboardOnlySections: false,
             titleTemplate: t("templateTitleDefault"),
             sections: [
@@ -226,6 +262,35 @@
         gap: 10px;
     }
     
+
+    .action-btn {
+        background: var(--b3-theme-primary);
+        color: var(--b3-theme-on-primary);
+        border: none;
+        border-radius: 999px;
+        padding: 0 18px;
+        height: 36px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        box-shadow: none;
+    }
+    .action-btn:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+        box-shadow: none;
+    }
+    .action-btn:active {
+        transform: translateY(0);
+        box-shadow: none;
+    }
+    .action-btn svg { fill: currentColor; }
+
     .time-trigger {
         background: var(--b3-theme-surface);
         border: 1px solid var(--b3-theme-surface-lighter);
@@ -254,9 +319,8 @@
     }
 
     .time-picker-popover {
-        position: absolute;
-        top: 60px;
-        right: 24px;
+        position: fixed;
+        margin-top: 8px;
         background: var(--b3-theme-surface);
         border: 1px solid var(--b3-theme-surface-lighter);
         border-radius: 16px;
@@ -267,6 +331,7 @@
         width: 140px;
         height: 200px;
         animation: fadeIn 0.15s ease-out;
+        pointer-events: auto;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -300,34 +365,6 @@
         top: 0; left: 0; right: 0; bottom: 0;
         z-index: 999;
     }
-
-    .action-btn {
-        background: var(--b3-theme-primary);
-        color: var(--b3-theme-on-primary);
-        border: none;
-        border-radius: 999px;
-        padding: 0 18px;
-        height: 36px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        box-shadow: none;
-    }
-    .action-btn:hover {
-        opacity: 0.9;
-        transform: translateY(-1px);
-        box-shadow: none;
-    }
-    .action-btn:active {
-        transform: translateY(0);
-        box-shadow: none;
-    }
-    .action-btn svg { fill: currentColor; }
 
     /* Scrollable Profile Container - Responsive Flex */
     .profile-container {
@@ -364,6 +401,7 @@
     .card.expanded { 
         border-color: var(--b3-theme-primary); 
         box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+        overflow: visible;
     }
 
     .card-header {
@@ -522,58 +560,15 @@
     }
 </style>
 
-<!-- Backdrop -->
-{#if showTimePicker}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <div class="backdrop" on:click={() => showTimePicker = false}></div>
+{#if showTimePickerId}
+    <div class="backdrop" on:click={() => showTimePickerId = null}></div>
 {/if}
 
 <div class="settings-container">
     
     <!-- Global Config -->
     <div class="section-header">
-        <div class="section-title">
-            <svg style="width:18px;height:18px"><use xlink:href="#iconCalendar"></use></svg>
-            {t("globalArchiveTime")}
-        </div>
         <div class="fn__flex-1"></div>
-        <button class="action-btn" style="background-color: transparent; color: var(--b3-theme-on-surface); box-shadow: none; border: 1px solid var(--b3-theme-surface-lighter); margin-right: 12px;" on:click={() => plugin.undoArchiveNow()}>
-            <svg style="width:14px;height:14px"><use xlink:href="#iconUndo"></use></svg>
-            {t("undoArchive")}
-        </button>
-        <button class="action-btn" style="margin-right: 32px;" on:click={() => plugin.archiveNow()}>
-            <svg style="width:14px;height:14px"><use xlink:href="#iconFiles"></use></svg>
-            {t("archiveNow")}
-        </button>
-        
-        <!-- Custom Time Trigger -->
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <div class="time-trigger" class:active={showTimePicker} on:click={toggleTimePicker}>
-            {archiveTime}
-            <svg style="width:14px;height:14px;opacity:0.6;"><use xlink:href="#iconClock"></use></svg>
-        </div>
-
-        {#if showTimePicker}
-            <div class="time-picker-popover">
-                <div class="time-col">
-                    {#each hours as h}
-                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                        <div id={`time-opt-h-${h}`} class="time-opt" class:selected={archiveTime.startsWith(h)} on:click={() => selectHour(h)}>
-                            {h}
-                        </div>
-                    {/each}
-                </div>
-                <div style="width:1px;background:var(--b3-theme-surface-lighter);"></div>
-                <div class="time-col">
-                    {#each minutes as m}
-                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                        <div id={`time-opt-m-${m}`} class="time-opt" class:selected={archiveTime.endsWith(m)} on:click={() => selectMinute(m)}>
-                            {m}
-                        </div>
-                    {/each}
-                </div>
-            </div>
-        {/if}
     </div>
 
     <!-- Profiles -->
@@ -619,6 +614,15 @@
                         <div class="icon-btn" on:click|stopPropagation={() => deleteProfile(profile.id)} title={t("deleteRule")}>
                             <svg><use xlink:href="#iconTrashcan"></use></svg>
                         </div>
+
+                        <button class="action-btn" style="height: 28px; padding: 0 12px; margin-right: 8px; background-color: transparent; color: var(--b3-theme-on-surface); box-shadow: none; border: 1px solid var(--b3-theme-surface-lighter);" on:click|stopPropagation={() => plugin.undoArchiveNow()}>
+                            <svg style="width:12px;height:12px"><use xlink:href="#iconUndo"></use></svg>
+                            {t("undoArchive")}
+                        </button>
+                        <button class="action-btn" style="height: 28px; padding: 0 12px; margin-right: 8px;" on:click|stopPropagation={() => plugin.archiveProfileNow(profile.id)}>
+                            <svg style="width:12px;height:12px"><use xlink:href="#iconFiles"></use></svg>
+                            {t("archiveNow")}
+                        </button>
                     </div>
 
                     {#if expandedId === profile.id}
@@ -641,6 +645,71 @@
                                 <div class="input-group fn__flex-1">
                                     <div class="input-label">{t("archivedStatusLabel")}</div>
                                     <input class="modern-input" type="text" bind:value={profile.archivedStatus} placeholder={t("archivedStatusPlaceholder")} on:change={save}/>
+                                </div>
+                            </div>
+
+                            <div class="input-group">
+                                <div class="input-label">{t("scheduleSection")}</div>
+                                <div class="fn__flex" style="gap: 12px; flex-wrap: wrap; align-items: center;">
+                                    <label class="switch-container" title={profile.schedule?.enabled ? t("enabled") : t("disabled")}>
+                                        <input class="switch-input" type="checkbox" bind:checked={profile.schedule.enabled} on:change={() => updateSchedule(profile, 'enabled', profile.schedule.enabled)}/>
+                                        <span class="switch-track">
+                                            <span class="switch-thumb"></span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="fn__flex" style="gap: 12px; flex-wrap: wrap; margin-top: 8px;">
+                                    <div class="input-group" style="min-width: 160px;">
+                                        <div class="input-label">{t("scheduleMode")}</div>
+                                        <select class="modern-input" bind:value={profile.schedule.mode} on:change={() => updateSchedule(profile, 'mode', profile.schedule.mode)}>
+                                            <option value="daily">{t("scheduleMode_daily")}</option>
+                                            <option value="weekly">{t("scheduleMode_weekly")}</option>
+                                            <option value="workday">{t("scheduleMode_workday")}</option>
+                                            <option value="monthly">{t("scheduleMode_monthly")}</option>
+                                            <option value="yearly">{t("scheduleMode_yearly")}</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="input-group" style="min-width: 140px;">
+                                        <div class="input-label">{t("scheduleTime")}</div>
+                                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                        <div class="time-trigger" class:active={showTimePickerId === profile.id} on:click|stopPropagation={(e) => toggleTimePicker(profile.id, e)}>
+                                            {getScheduleTime(profile)}
+                                            <svg style="width:14px;height:14px;opacity:0.6;"><use xlink:href="#iconClock"></use></svg>
+                                        </div>
+                                        {#if showTimePickerId === profile.id}
+                                            <!-- rendered at root to avoid overflow/click issues -->
+                                        {/if}
+                                    </div>
+
+                                    {#if profile.schedule.mode === 'weekly'}
+                                        <div class="input-group" style="min-width: 140px;">
+                                            <div class="input-label">{t("scheduleWeekday")}</div>
+                                            <select class="modern-input" bind:value={profile.schedule.weekday} on:change={() => updateSchedule(profile, 'weekday', profile.schedule.weekday)}>
+                                                {#each weekdays as d}
+                                                    <option value={d.value}>{t(`weekday_${d.value}`)}</option>
+                                                {/each}
+                                            </select>
+                                        </div>
+                                    {/if}
+
+                                    {#if profile.schedule.mode === 'monthly'}
+                                        <div class="input-group" style="min-width: 140px;">
+                                            <div class="input-label">{t("scheduleMonthday")}</div>
+                                            <input class="modern-input" type="number" min="1" max="31" bind:value={profile.schedule.monthday} on:change={() => updateSchedule(profile, 'monthday', profile.schedule.monthday)}/>
+                                        </div>
+                                    {/if}
+
+                                    {#if profile.schedule.mode === 'yearly'}
+                                        <div class="input-group" style="min-width: 140px;">
+                                            <div class="input-label">{t("scheduleMonth")}</div>
+                                            <input class="modern-input" type="number" min="1" max="12" bind:value={profile.schedule.month} on:change={() => updateSchedule(profile, 'month', profile.schedule.month)}/>
+                                        </div>
+                                        <div class="input-group" style="min-width: 140px;">
+                                            <div class="input-label">{t("scheduleMonthday")}</div>
+                                            <input class="modern-input" type="number" min="1" max="31" bind:value={profile.schedule.monthday} on:change={() => updateSchedule(profile, 'monthday', profile.schedule.monthday)}/>
+                                        </div>
+                                    {/if}
                                 </div>
                             </div>
                         </div>
@@ -734,6 +803,15 @@
                                 <input class="modern-input" type="text" bind:value={tpl.pathTemplate} placeholder={t("templatePathPlaceholder")} on:change={save}/>
                             </div>
                             <div class="input-group">
+                                <div class="input-label">{t("templateAppendMode")}</div>
+                                <label class="switch-container" title={tpl.appendMode ? t("enabled") : t("disabled")}>
+                                    <input class="switch-input" type="checkbox" bind:checked={tpl.appendMode} on:change={save}/>
+                                    <span class="switch-track">
+                                        <span class="switch-thumb"></span>
+                                    </span>
+                                </label>
+                            </div>
+                            <div class="input-group">
                                 <div class="input-label">{t("reportClipboardOnlySections")}</div>
                                 <label class="switch-container" title={tpl.clipboardOnlySections ? t("enabled") : t("disabled")}>
                                     <input class="switch-input" type="checkbox" bind:checked={tpl.clipboardOnlySections} on:change={save}>
@@ -810,3 +888,26 @@
         </ul>
     </div>
 </div>
+
+{#if showTimePickerId && activeProfile}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div class="time-picker-popover" style={timePickerStyle} on:click|stopPropagation>
+        <div class="time-col">
+            {#each hours as h}
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <div id={`time-opt-h-${h}-${activeProfile.id}`} class="time-opt" class:selected={getScheduleTime(activeProfile).startsWith(h)} on:click|stopPropagation={() => selectHour(activeProfile, h)}>
+                    {h}
+                </div>
+            {/each}
+        </div>
+        <div style="width:1px;background:var(--b3-theme-surface-lighter);"></div>
+        <div class="time-col">
+            {#each minutes as m}
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <div id={`time-opt-m-${m}-${activeProfile.id}`} class="time-opt" class:selected={getScheduleTime(activeProfile).endsWith(m)} on:click|stopPropagation={() => selectMinute(activeProfile, m)}>
+                    {m}
+                </div>
+            {/each}
+        </div>
+    </div>
+{/if}
