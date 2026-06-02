@@ -1,4 +1,5 @@
 import { appendBlock, createDocWithMd, deleteBlock, lsNotebooks, renderAttributeView, setBlockAttrs, sql, pushErrMsg, pushMsg, getAttributeViewBoundBlockIDsByItemIDs } from "./api";
+import { escapeSqlValue, resolveProfileAvInfo } from "./api/kanban";
 
 function extractCellValue(v: any): string {
     if (!v) return "";
@@ -111,10 +112,6 @@ function stripEmoji(str = ""): string {
 
 function normalizeStatus(input: any): string {
     return stripEmoji(String(input || "")).toLowerCase().trim();
-}
-
-function escapeSqlValue(input: any): string {
-    return String(input ?? "").replace(/'/g, "''");
 }
 
 function extractBlockId(v: any, depth = 0): string {
@@ -340,14 +337,12 @@ async function writeToDoc(plugin: any, template: any, date: Date, md: string, me
         await new Promise(r => setTimeout(r, 600));
     }
 
-    if (!template.appendMode) {
-        const allBlocks = await sql(`SELECT id FROM blocks WHERE root_id = '${docId}'`);
-        const clearIds = (allBlocks || []).map((b: any) => b.id).filter((id: string) => id && id !== docId);
-        for (const id of clearIds) {
-            await deleteBlock(id);
-        }
-        if (clearIds.length > 0) await new Promise(r => setTimeout(r, 300));
+    const allBlocks = await sql(`SELECT id FROM blocks WHERE root_id = '${escapeSqlValue(docId)}'`);
+    const clearIds = (allBlocks || []).map((b: any) => b.id).filter((id: string) => id && id !== docId);
+    for (const id of clearIds) {
+        await deleteBlock(id);
     }
+    if (clearIds.length > 0) await new Promise(r => setTimeout(r, 300));
 
     const result = await appendBlock("markdown", md, docId);
     if (result && result.length > 0) {
@@ -362,20 +357,9 @@ async function resolveAvFromProfile(plugin: any, profileId: string): Promise<{ a
     const profiles = plugin.config?.profiles || [];
     const profile = profiles.find((p: any) => p.id === profileId);
     if (!profile?.keyword) return { avId: "", viewId: "", profileName: "" };
-
-    const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${profile.keyword}%' AND type = 'd' LIMIT 1`);
-    if (!docResult || docResult.length === 0) return { avId: "", viewId: "", profileName: "" };
-    const docId = docResult[0].id;
-
-    const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${docId}' AND type = 'av' LIMIT 1`);
-    if (!avBlockResult || avBlockResult.length === 0) return { avId: "", viewId: "", profileName: "" };
-    const avBlock = avBlockResult[0];
-    const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
-    if (!avIdMatch) return { avId: "", viewId: "", profileName: "" };
-    const avId = avIdMatch[1];
-    const viewIdMatch = avBlock.markdown.match(/data-view-id="([^"]+)"/);
-    const viewId = viewIdMatch ? viewIdMatch[1] : avId;
-    return { avId, viewId, profileName: profile.name || profile.keyword || profile.id };
+    const resolved = await resolveProfileAvInfo(profile);
+    if (!resolved) return { avId: "", viewId: "", profileName: "" };
+    return { avId: resolved.avId, viewId: resolved.viewId, profileName: resolved.profileName };
 }
 
 export async function generateTemplateReport(plugin: any, template: any): Promise<void> {

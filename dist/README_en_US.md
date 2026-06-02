@@ -2,6 +2,13 @@
 
 Kanban Workflow is a unified plugin for SiYuan Attribute View / Database, combining **auto-archiving** and **report templates** into one reliable workflow.
 
+## Latest Updates
+
+- Updated settings tips to reflect the latest features
+- Reports support multi-rule, multi-board summaries with status mapping and period filtering
+- Generation overwrites prior content and copies to clipboard (optionally sections only)
+- Path and title templates support `{YYYY}/{MM}/{WW}/{date}` placeholders
+
 ## Features
 
 - Auto archive by schedule

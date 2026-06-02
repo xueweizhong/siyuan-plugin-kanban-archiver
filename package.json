@@ -1,6 +1,6 @@
 {
     "name": "siyuan-plugin-kanban-archiver",
-    "version": "0.3.37",
+    "version": "0.3.38",
     "description": "Kanban workflow: auto archive + report templates",
     "author": "xueweizhong",
     "repository": {
@@ -14,7 +14,7 @@
         "preview": "vite preview"
     },
     "dependencies": {
-        "siyuan": "1.1.5"
+        "siyuan": "^1.2.1"
     },
     "devDependencies": {
         "@sveltejs/vite-plugin-svelte": "^3.0.1",
