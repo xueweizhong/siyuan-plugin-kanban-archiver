@@ -1,33 +1,53 @@
 import { sql, getAttributeViewKeysByAvID, renderAttributeView, setAttributeViewBlockAttr, pushMsg, pushErrMsg } from "../api";
 
+export type ArchivedTaskRef = {
+    profileId: string;
+    avId: string;
+    itemId: string;
+};
+
+export function escapeSqlValue(input: any): string {
+    return String(input ?? "").replace(/'/g, "''");
+}
+
+export async function resolveProfileAvInfo(profile: any): Promise<{ avId: string; viewId: string; profileName: string } | null> {
+    const keyword = String(profile?.keyword || "").trim();
+    if (!keyword) return null;
+
+    const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${escapeSqlValue(keyword)}%' AND type = 'd' LIMIT 1`);
+    if (!docResult || docResult.length === 0) return null;
+    const docId = docResult[0].id;
+
+    const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${escapeSqlValue(docId)}' AND type = 'av' LIMIT 1`);
+    if (!avBlockResult || avBlockResult.length === 0) return null;
+    const avBlock = avBlockResult[0];
+    const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
+    if (!avIdMatch) return null;
+    const avId = avIdMatch[1];
+    const viewIdMatch = avBlock.markdown.match(/data-view-id="([^"]+)"/);
+    const viewId = viewIdMatch ? viewIdMatch[1] : avId;
+
+    return {
+        avId,
+        viewId,
+        profileName: profile?.name || keyword || profile?.id || ""
+    };
+}
+
 /**
  * 通用：切换看板任务状态
  */
-export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStatus: string, toStatus: string, manual: boolean = false): Promise<string[]> {
+export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStatus: string, toStatus: string, manual: boolean = false): Promise<ArchivedTaskRef[]> {
     try {
-        const keyword = profile.keyword;
+        const keyword = String(profile?.keyword || "");
         console.log(`Starting Kanban status switch for profile "${profile.name}": "${fromStatus}" -> "${toStatus}"`);
 
-        // 1. Find Kanban Doc
-        const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${keyword}%' AND type = 'd' LIMIT 1`);
-        if (!docResult || docResult.length === 0) {
+        const resolved = await resolveProfileAvInfo(profile);
+        if (!resolved) {
             console.log(`Kanban doc not found for keyword: ${keyword}`);
             return [];
         }
-        const docId = docResult[0].id;
-
-        // 2. Find AV Block
-        const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${docId}' AND type = 'av' LIMIT 1`);
-        if (!avBlockResult || avBlockResult.length === 0) {
-            if (manual) pushErrMsg(`文档中未找到数据库视图 (Profile: ${profile.name})`);
-            return [];
-        }
-        const avBlock = avBlockResult[0];
-
-        // 3. Extract IDs
-        const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
-        if (!avIdMatch) return [];
-        const avId = avIdMatch[1];
+        const { avId, viewId } = resolved;
 
         // 4. Get Columns
         const keys = await getAttributeViewKeysByAvID(avId);
@@ -57,8 +77,6 @@ export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStat
         }
 
         // 5. Get Rows
-        const viewIdMatch = avBlock.markdown.match(/data-view-id="([^"]+)"/);
-        let viewId = viewIdMatch ? viewIdMatch[1] : avId;
         let avData = await renderAttributeView(avId, viewId);
 
         const getAllRows = (data: any, depth = 0): any[] => {
@@ -98,7 +116,7 @@ export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStat
         const columns = avData.view?.columns || avData.columns || [];
         let statusColIndex = columns.findIndex((c: any) => c.id === statusKey.id);
 
-        let modifiedIds: string[] = [];
+        let modifiedIds: ArchivedTaskRef[] = [];
         let updateCount = 0;
 
         for (const row of rows) {
@@ -133,7 +151,11 @@ export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStat
                     }]
                 };
                 await setAttributeViewBlockAttr(avId, statusKey.id, row.id, newValue);
-                modifiedIds.push(row.id);
+                modifiedIds.push({
+                    profileId: profile?.id || "",
+                    avId,
+                    itemId: row.id
+                });
                 updateCount++;
             }
         }
@@ -154,56 +176,100 @@ export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStat
 /**
  * 恢复特定ID的任务状态为“已完成”
  */
-export async function restoreKanbanTasks(plugin: any, taskIds: string[]): Promise<boolean> {
-    if (!taskIds || taskIds.length === 0) return false;
+export async function restoreKanbanTasks(plugin: any, taskRefs: Array<ArchivedTaskRef | string>): Promise<boolean> {
+    if (!taskRefs || taskRefs.length === 0) return false;
     const profiles = plugin.config.profiles || [];
 
     let totalRestored = 0;
 
-    for (const profile of profiles) {
-        try {
-            const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${profile.keyword}%' AND type = 'd' LIMIT 1`);
-            if (!docResult || docResult.length === 0) continue;
-            const docId = docResult[0].id;
+    const preciseRefs = taskRefs.filter((taskRef): taskRef is ArchivedTaskRef => typeof taskRef === "object" && !!taskRef && !!taskRef.itemId);
 
-            const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${docId}' AND type = 'av' LIMIT 1`);
-            if (!avBlockResult || avBlockResult.length === 0) continue;
-            const avBlock = avBlockResult[0];
-            const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
-            if (!avIdMatch) continue;
-            const avId = avIdMatch[1];
+    if (preciseRefs.length > 0) {
+        const grouped = new Map<string, ArchivedTaskRef[]>();
+        for (const ref of preciseRefs) {
+            const groupKey = `${ref.profileId}::${ref.avId}`;
+            const current = grouped.get(groupKey) || [];
+            current.push(ref);
+            grouped.set(groupKey, current);
+        }
 
-            const keys = await getAttributeViewKeysByAvID(avId);
-            if (!keys) continue;
+        for (const refs of grouped.values()) {
+            const profile = profiles.find((item: any) => item.id === refs[0].profileId);
+            if (!profile) continue;
+            try {
+                const resolved = await resolveProfileAvInfo(profile);
+                if (!resolved || resolved.avId !== refs[0].avId) continue;
 
-            let statusKey: any = null;
-            let optTarget: any = null;
-            for (const key of keys) {
-                if ((key.type === 'select' || key.type === 'mSelect') && key.options) {
-                    const t = key.options.find((opt: any) => opt.name === profile.completedStatus);
-                    if (t) {
-                        statusKey = key;
-                        optTarget = t;
-                        break;
+                const keys = await getAttributeViewKeysByAvID(resolved.avId);
+                if (!keys) continue;
+
+                let statusKey: any = null;
+                let optTarget: any = null;
+                for (const key of keys) {
+                    if ((key.type === 'select' || key.type === 'mSelect') && key.options) {
+                        const t = key.options.find((opt: any) => opt.name === profile.completedStatus);
+                        if (t) {
+                            statusKey = key;
+                            optTarget = t;
+                            break;
+                        }
                     }
                 }
-            }
-            if (!statusKey || !optTarget) continue;
+                if (!statusKey || !optTarget) continue;
 
-            const newValue = {
-                mSelect: [{
-                    content: optTarget.name,
-                    color: optTarget.color
-                }]
-            };
+                const newValue = {
+                    mSelect: [{
+                        content: optTarget.name,
+                        color: optTarget.color
+                    }]
+                };
 
-            for (const id of taskIds) {
-                // Try setting for all. Blind try.
-                await setAttributeViewBlockAttr(avId, statusKey.id, id, newValue);
+                for (const ref of refs) {
+                    await setAttributeViewBlockAttr(resolved.avId, statusKey.id, ref.itemId, newValue);
+                    totalRestored++;
+                }
+            } catch (e) {
+                console.warn("Restore failed for profile", profile.name, e);
             }
-            totalRestored += taskIds.length;
-        } catch (e) {
-            console.warn("Restore attempted failed for profile", profile.name, e);
+        }
+    } else {
+        const legacyTaskIds = taskRefs.filter((taskRef): taskRef is string => typeof taskRef === "string");
+        for (const profile of profiles) {
+            try {
+                const resolved = await resolveProfileAvInfo(profile);
+                if (!resolved) continue;
+
+                const keys = await getAttributeViewKeysByAvID(resolved.avId);
+                if (!keys) continue;
+
+                let statusKey: any = null;
+                let optTarget: any = null;
+                for (const key of keys) {
+                    if ((key.type === 'select' || key.type === 'mSelect') && key.options) {
+                        const t = key.options.find((opt: any) => opt.name === profile.completedStatus);
+                        if (t) {
+                            statusKey = key;
+                            optTarget = t;
+                            break;
+                        }
+                    }
+                }
+                if (!statusKey || !optTarget) continue;
+
+                const newValue = {
+                    mSelect: [{
+                        content: optTarget.name,
+                        color: optTarget.color
+                    }]
+                };
+
+                for (const id of legacyTaskIds) {
+                    await setAttributeViewBlockAttr(resolved.avId, statusKey.id, id, newValue);
+                }
+                totalRestored += legacyTaskIds.length;
+            } catch (e) {
+                console.warn("Restore attempted failed for profile", profile.name, e);
+            }
         }
     }
 
@@ -217,9 +283,9 @@ export async function restoreKanbanTasks(plugin: any, taskIds: string[]): Promis
 /**
  * 归档任务
  */
-export async function archiveKanbanTasks(plugin: any, manual: boolean = false, profileIds?: string[]): Promise<string[]> {
+export async function archiveKanbanTasks(plugin: any, manual: boolean = false, profileIds?: string[]): Promise<ArchivedTaskRef[]> {
     let profiles = plugin.config.profiles || [];
-    let allModifiedIds: string[] = [];
+    let allModifiedIds: ArchivedTaskRef[] = [];
 
     if (profiles.length === 0) {
         if (manual) pushErrMsg("未配置任何归档规则，请在设置中添加");

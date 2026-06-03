@@ -1,5 +1,5 @@
 import { Plugin, Protyle, Dialog, Menu } from "siyuan";
-import { archiveKanbanTasks, restoreKanbanTasks } from "./api/kanban";
+import { archiveKanbanTasks, resolveProfileAvInfo, restoreKanbanTasks } from "./api/kanban";
 import { getAttributeViewKeysByAvID, lsNotebooks, sql, pushMsg } from "./api";
 import { setPluginInstance } from "./utils/i18n";
 import Settings from "./Settings.svelte";
@@ -564,15 +564,9 @@ export default class KanbanWorkflowPlugin extends Plugin {
         for (const rid of ruleIds) {
             const profile = profiles.find((p: any) => p.id === rid);
             if (!profile?.keyword) continue;
-            const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${profile.keyword}%' AND type = 'd' LIMIT 1`);
-            if (!docResult || docResult.length === 0) continue;
-            const docId = docResult[0].id;
-            const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${docId}' AND type = 'av' LIMIT 1`);
-            if (!avBlockResult || avBlockResult.length === 0) continue;
-            const avBlock = avBlockResult[0];
-            const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
-            if (!avIdMatch) continue;
-            const avId = avIdMatch[1];
+            const resolved = await resolveProfileAvInfo(profile);
+            if (!resolved?.avId) continue;
+            const avId = resolved.avId;
             const keys = await getAttributeViewKeysByAvID(avId);
             if (!keys) continue;
             for (const key of keys) {
