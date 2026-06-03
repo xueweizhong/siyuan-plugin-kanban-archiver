@@ -1,4 +1,5 @@
 import { appendBlock, createDocWithMd, deleteBlock, lsNotebooks, renderAttributeView, setBlockAttrs, sql, pushErrMsg, pushMsg, getAttributeViewBoundBlockIDsByItemIDs } from "./api";
+import { escapeSqlValue, resolveProfileAvInfo } from "./api/kanban";
 
 function extractCellValue(v: any): string {
     if (!v) return "";
@@ -113,8 +114,19 @@ function normalizeStatus(input: any): string {
     return stripEmoji(String(input || "")).toLowerCase().trim();
 }
 
-function escapeSqlValue(input: any): string {
-    return String(input ?? "").replace(/'/g, "''");
+function ensurePlainText(input: any): string {
+    if (input == null) return "";
+    if (typeof input === "string") return input;
+    if (typeof input === "number" || typeof input === "boolean") return String(input);
+    if (Array.isArray(input)) return input.map((item: any) => ensurePlainText(item)).filter(Boolean).join(", ");
+    const extracted = extractCellValue(input);
+    if (typeof extracted === "string" && extracted) return extracted;
+    try {
+        return String(input);
+    } catch (e) {
+        console.warn("[KanbanWorkflow][Report] ensurePlainText failed:", input, e);
+        return "";
+    }
 }
 
 function extractBlockId(v: any, depth = 0): string {
@@ -363,19 +375,9 @@ async function resolveAvFromProfile(plugin: any, profileId: string): Promise<{ a
     const profile = profiles.find((p: any) => p.id === profileId);
     if (!profile?.keyword) return { avId: "", viewId: "", profileName: "" };
 
-    const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${profile.keyword}%' AND type = 'd' LIMIT 1`);
-    if (!docResult || docResult.length === 0) return { avId: "", viewId: "", profileName: "" };
-    const docId = docResult[0].id;
-
-    const avBlockResult = await sql(`SELECT id, markdown FROM blocks WHERE root_id = '${docId}' AND type = 'av' LIMIT 1`);
-    if (!avBlockResult || avBlockResult.length === 0) return { avId: "", viewId: "", profileName: "" };
-    const avBlock = avBlockResult[0];
-    const avIdMatch = avBlock.markdown.match(/data-av-id="([^"]+)"/);
-    if (!avIdMatch) return { avId: "", viewId: "", profileName: "" };
-    const avId = avIdMatch[1];
-    const viewIdMatch = avBlock.markdown.match(/data-view-id="([^"]+)"/);
-    const viewId = viewIdMatch ? viewIdMatch[1] : avId;
-    return { avId, viewId, profileName: profile.name || profile.keyword || profile.id };
+    const resolved = await resolveProfileAvInfo(profile);
+    if (!resolved) return { avId: "", viewId: "", profileName: "" };
+    return { avId: resolved.avId, viewId: resolved.viewId, profileName: resolved.profileName };
 }
 
 export async function generateTemplateReport(plugin: any, template: any): Promise<void> {
@@ -581,11 +583,20 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                 if (!text) {
                     text = t("reportFallbackContent", "无内容");
                 }
+                text = ensurePlainText(text);
 
                 if (period === "week") {
-                    text = text.replace(/\b\d+(\.\d+)?\s*[hH]\b/gi, "").replace(/\((?:\d\.?)+[hH]\)/g, "").trim();
+                    const textBeforeCleanup = text;
+                    text = ensurePlainText(text).replace(/\b\d+(\.\d+)?\s*[hH]\b/gi, "").replace(/\((?:\d\.?)+[hH]\)/g, "").trim();
                     if (!text && Array.isArray(row.cells?.[cIdx]) && row.cells[cIdx].length > 0) {
-                        text = row.cells[cIdx].map((v: any) => extractCellValue(v)).join(", ");
+                        text = row.cells[cIdx].map((v: any) => ensurePlainText(v)).join(", ");
+                    }
+                    if (idx === 0) {
+                        console.log("[KanbanWorkflow][Report] weeklyTextCleanup:", {
+                            before: textBeforeCleanup,
+                            beforeType: typeof textBeforeCleanup,
+                            after: text
+                        });
                     }
                 }
 
@@ -598,8 +609,9 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                     });
                     status = fallback || "";
                 }
+                status = ensurePlainText(status);
                 if (idx === 0) console.log("[KanbanWorkflow][Report] sampleStatus:", status);
-                const attrTimeStr = tIdx !== -1 ? cellValues[tIdx] : "";
+                const attrTimeStr = ensurePlainText(tIdx !== -1 ? cellValues[tIdx] : "");
                 const attrTs = resolveTimestamp(attrTimeStr);
                 const updTs = resolveTimestamp(row.updatedAt);
                 const finalTime = period !== "none" ? (attrTs || updTs || 0) : (attrTs || updTs || Date.now());
@@ -648,6 +660,6 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
         await copyToClipboard(plugin, template, finalMd);
     } catch (e: any) {
         console.error(e);
-        pushErrMsg("生成过程中遇障");
+        pushErrMsg(`生成过程中遇障：${e?.message || String(e)}`);
     }
 }
