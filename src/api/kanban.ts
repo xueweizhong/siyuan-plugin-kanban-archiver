@@ -1,4 +1,4 @@
-import { sql, getAttributeViewKeysByAvID, renderAttributeView, setAttributeViewBlockAttr, pushMsg, pushErrMsg } from "../api";
+import { getAttributeView, searchAttributeView, sql, getAttributeViewKeysByAvID, renderAttributeView, setAttributeViewBlockAttr, pushMsg, pushErrMsg } from "../api";
 
 export type ArchivedTaskRef = {
     profileId: string;
@@ -18,10 +18,35 @@ export function escapeSqlValue(input: any): string {
     return String(input ?? "").replace(/'/g, "''");
 }
 
+type AttributeViewSearchResult = {
+    avID?: string;
+    viewID?: string;
+    viewLayout?: string;
+    children?: AttributeViewSearchResult[];
+};
+
+function findTableView(results: AttributeViewSearchResult[], avId: string): AttributeViewSearchResult | null {
+    let selected: AttributeViewSearchResult | null = null;
+    const visit = (item: AttributeViewSearchResult) => {
+        if (selected) return;
+        if (item.avID === avId && item.viewID && item.viewLayout === "table") {
+            selected = item;
+            return;
+        }
+        if (Array.isArray(item.children)) {
+            item.children.forEach(visit);
+        }
+    };
+    results.forEach(visit);
+    return selected;
+}
+
 export async function resolveProfileAvInfo(profile: any): Promise<ResolvedProfileAv | null> {
     const keyword = String(profile?.keyword || "").trim();
     if (!keyword) return null;
 
+    // Locate the exact document and AV first so duplicate keywords cannot select
+    // a different board from the search index.
     const docResult = await sql(`SELECT id FROM blocks WHERE content LIKE '%${escapeSqlValue(keyword)}%' AND type = 'd' LIMIT 1`);
     if (!docResult || docResult.length === 0) {
         return null;
@@ -39,8 +64,32 @@ export async function resolveProfileAvInfo(profile: any): Promise<ResolvedProfil
     }
 
     const avId = avIdMatch[1];
-    const viewIdMatch = avBlock.markdown.match(/data-view-id="([^"]+)"/);
-    const viewId = viewIdMatch ? viewIdMatch[1] : avId;
+
+    // The AV API now requires a real view ID. The document's NodeAttributeView
+    // marker may contain only data-av-id, so resolve the table view directly by
+    // AV ID and never substitute the AV ID itself.
+    const avMeta = await getAttributeView(avId);
+    const metadataViews = Array.isArray(avMeta?.av?.views)
+        ? avMeta.av.views
+        : Array.isArray(avMeta?.views)
+            ? avMeta.views
+            : [];
+    let viewId = metadataViews.find((view: any) => view?.type === "table" && view?.id)?.id || "";
+
+    if (!viewId) {
+        // Older versions may not expose getAttributeView; use the search result
+        // shape there, while still accepting only a table child for this flow.
+        const searchResult = await searchAttributeView(keyword, avId);
+        const searchItems: AttributeViewSearchResult[] = Array.isArray(searchResult?.results)
+            ? searchResult.results
+            : [];
+        viewId = findTableView(searchItems, avId)?.viewID || "";
+    }
+
+    if (!viewId) {
+        console.warn(`[KanbanWorkflow] Unable to resolve a table view ID for AV "${avId}"`);
+        return null;
+    }
 
     return {
         docId,

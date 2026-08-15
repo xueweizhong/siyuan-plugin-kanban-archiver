@@ -376,7 +376,7 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
         for (const pid of selectedIds) {
             const resolved = await resolveAvFromProfile(plugin, pid);
             if (!resolved.avId) continue;
-            const avData = await renderAttributeView(resolved.avId, resolved.viewId || resolved.avId, 2000, 1);
+            const avData = await renderAttributeView(resolved.avId, resolved.viewId, 2000, 1);
             if (!avData) continue;
             allBoards.push({ profileName: resolved.profileName, avData, avId: resolved.avId });
         }

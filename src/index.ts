@@ -18,7 +18,7 @@ export default class KanbanWorkflowPlugin extends Plugin {
 
     async onload() {
         setPluginInstance(this);
-        console.log(`Loading Kanban Workflow Plugin v${this.manifest.version}`);
+        console.log("Loading Kanban Workflow Plugin");
 
         await this.loadAndNormalizeConfig();
 

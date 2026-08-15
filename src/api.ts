@@ -642,6 +642,15 @@ export async function searchAttributeView(keyword: string, avID?: string): Promi
 }
 
 /**
+ * 获取数据库及其全部视图
+ * @param id 数据库ID
+ */
+export async function getAttributeView(id: string): Promise<any> {
+    const url = '/api/av/getAttributeView';
+    return request(url, { id });
+}
+
+/**
  * 获取数据库的列信息
  * @param avID 数据库ID
  */
