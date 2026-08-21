@@ -2,7 +2,7 @@
     "name": "siyuan-plugin-kanban-archiver",
     "author": "xueweizhong",
     "url": "https://github.com/xueweizhong/siyuan-plugin-kanban-archiver",
-    "version": "0.3.41",
+    "version": "0.3.42",
     "minAppVersion": "3.5.3",
     "backends": [
         "all"

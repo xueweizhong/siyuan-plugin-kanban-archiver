@@ -1,6 +1,6 @@
 {
     "name": "siyuan-plugin-kanban-archiver",
-    "version": "0.3.41",
+    "version": "0.3.42",
     "description": "Kanban workflow: auto archive + report templates",
     "author": "xueweizhong",
     "repository": {

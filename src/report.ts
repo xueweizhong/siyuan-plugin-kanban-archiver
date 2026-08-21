@@ -6,12 +6,12 @@ function extractCellValue(v: any): string {
     if (Array.isArray(v)) return v.map((i: any) => extractCellValue(i)).filter(Boolean).join(", ");
     if (typeof v === "string") return v;
     if (typeof v === "number") return v.toString();
-    if (v.content !== undefined) return v.content;
-    if (v.text?.content !== undefined) return v.text.content;
-    if (v.block?.content !== undefined) return v.block.content;
-    if (v.date?.content !== undefined) return v.date.content;
-    if (v.mSelect?.length > 0) return v.mSelect.map((i: any) => i.content).join(", ");
-    if (v.select?.content !== undefined) return v.select.content;
+    if (v.content !== undefined) return extractCellValue(v.content);
+    if (v.text?.content !== undefined) return extractCellValue(v.text.content);
+    if (v.block?.content !== undefined) return extractCellValue(v.block.content);
+    if (v.date?.content !== undefined) return extractCellValue(v.date.content);
+    if (v.mSelect?.length > 0) return v.mSelect.map((i: any) => extractCellValue(i.content)).filter(Boolean).join(", ");
+    if (v.select?.content !== undefined) return extractCellValue(v.select.content);
     for (const key in v) {
         if (typeof v[key] === "object" && v[key] !== null) {
             const res = extractCellValue(v[key]);
@@ -473,17 +473,15 @@ export async function generateTemplateReport(plugin: any, template: any): Promis
                     extractBlockId(contentValueObj) ||
                     extractBlockId(raw?.block) ||
                     extractBlockId(raw);
-                const contentFromRow =
-                    raw?.block?.content ||
-                    raw?.content ||
-                    raw?.name ||
-                    raw?.title?.content ||
-                    raw?.title ||
-                    raw?.text?.content ||
-                    raw?.text ||
-                    raw?.value?.content ||
-                    (contentValueObj ? extractCellValue(contentValueObj) : "") ||
-                    "";
+                const contentFromRow = [
+                    raw?.block?.content,
+                    raw?.content,
+                    raw?.name,
+                    raw?.title,
+                    raw?.text,
+                    raw?.value,
+                    contentValueObj
+                ].map(extractCellValue).find(Boolean) || "";
                 return {
                     id: raw.id,
                     cells,

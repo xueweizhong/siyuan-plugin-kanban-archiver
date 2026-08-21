@@ -1,4 +1,4 @@
-import { getAttributeView, searchAttributeView, sql, getAttributeViewKeysByAvID, renderAttributeView, setAttributeViewBlockAttr, pushMsg, pushErrMsg } from "../api";
+import { getAttributeView, searchAttributeView, sql, getAttributeViewKeysByAvID, renderAttributeView, batchSetAttributeViewBlockAttrs, pushMsg, pushErrMsg } from "../api";
 
 export type ArchivedTaskRef = {
     profileId: string;
@@ -184,7 +184,7 @@ export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStat
         let statusColIndex = columns.findIndex((c: any) => c.id === statusKey.id);
 
         let modifiedIds: ArchivedTaskRef[] = [];
-        let updateCount = 0;
+        const updates: Array<{ keyID: string; itemID: string; value: any }> = [];
 
         for (const row of rows) {
             let matchesFrom = false;
@@ -217,16 +217,20 @@ export async function switchKanbanTaskStatus(plugin: any, profile: any, fromStat
                         color: optTo.color
                     }]
                 };
-                await setAttributeViewBlockAttr(avId, statusKey.id, row.id, newValue);
+                updates.push({ keyID: statusKey.id, itemID: row.id, value: newValue });
                 modifiedIds.push({
                     profileId: profile?.id || "",
                     avId,
                     itemId: row.id
                 });
-                updateCount++;
             }
         }
 
+        if (updates.length > 0) {
+            await batchSetAttributeViewBlockAttrs(avId, updates);
+        }
+
+        const updateCount = updates.length;
         if (updateCount > 0) {
             pushMsg(`[${profile.name}] 已归档 ${updateCount} 个任务`);
         }
@@ -290,10 +294,9 @@ export async function restoreKanbanTasks(plugin: any, taskRefs: Array<ArchivedTa
                     }]
                 };
 
-                for (const ref of refs) {
-                    await setAttributeViewBlockAttr(resolved.avId, statusKey.id, ref.itemId, newValue);
-                    totalRestored++;
-                }
+                const updates = refs.map((ref) => ({ keyID: statusKey.id, itemID: ref.itemId, value: newValue }));
+                await batchSetAttributeViewBlockAttrs(resolved.avId, updates);
+                totalRestored += updates.length;
             } catch (e) {
                 console.warn("Restore failed for profile", profile.name, e);
             }
@@ -329,10 +332,9 @@ export async function restoreKanbanTasks(plugin: any, taskRefs: Array<ArchivedTa
                     }]
                 };
 
-                for (const id of legacyTaskIds) {
-                    await setAttributeViewBlockAttr(resolved.avId, statusKey.id, id, newValue);
-                }
-                totalRestored += legacyTaskIds.length;
+                const updates = legacyTaskIds.map((id) => ({ keyID: statusKey.id, itemID: id, value: newValue }));
+                await batchSetAttributeViewBlockAttrs(resolved.avId, updates);
+                totalRestored += updates.length;
             } catch (e) {
                 console.warn("Restore attempted failed for profile", profile.name, e);
             }

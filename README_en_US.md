@@ -1,6 +1,6 @@
 # Kanban Workflow
 
-> v0.3.41: Compatible with SiYuan 3.8.0 attribute-view APIs; fixes kanban archive and report reads.
+> v0.3.42: Fixes report generation when newer attribute-view APIs return object cell values.
 
 Kanban Workflow is a unified plugin for SiYuan Attribute View / Database, combining **auto-archiving** and **report templates** into one reliable workflow.
 
